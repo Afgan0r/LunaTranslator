@@ -793,7 +793,10 @@ class texthook(basetext):
 
     def handle_output(self, hc, hn: bytes, tp, output):
         key = (hc, hn.decode("utf8"), tp)
-        if key in self.selectedhook:
+        translator = gobject.base.translators.get("selfbuild")
+        capture = getattr(translator, "capture_hook_event", None)
+        handled = capture(self.gameuid, hc, key[1], tp, output) if capture else False
+        if not handled and key in self.selectedhook:
             if len(self.selectedhook) == 1:
                 self.dispatchtext(output)
             else:

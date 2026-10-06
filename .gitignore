@@ -59,3 +59,17 @@ spacy_wrapper
 src/DirectLiveCaptions
 *.onnx
 src/LunaTranslator/defaultconfig/llama.cpp.version.json
+
+# Grisaia deployments, secrets and private playthrough artifacts live elsewhere.
+__pycache__/
+.env
+.env.*
+.secrets
+secrets/
+openai-api-key.txt
+*.sqlite3
+*.sqlite3-*
+hook-probe.jsonl
+opening.json
+opening-steam.json
+benchmark.json

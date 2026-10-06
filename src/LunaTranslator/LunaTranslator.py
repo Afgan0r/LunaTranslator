@@ -1241,7 +1241,10 @@ class BASEOBJECT(QObject):
     def commonloader_warp(self, fanyiorcishu, dictobject, initmethod, _type):
         try:
             if _type in dictobject:
-                dictobject.pop(_type)
+                previous = dictobject.pop(_type)
+                stop = getattr(previous, "stop_lossless", None)
+                if stop:
+                    stop()
             use = globalconfig[fanyiorcishu][_type]["use"]
             rankkeys = {"cishu": "cishuvisrank", "fanyi": "fix_translate_rank_rank"}
             rankkey = rankkeys.get(fanyiorcishu)
