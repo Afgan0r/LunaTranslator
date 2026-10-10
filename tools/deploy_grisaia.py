@@ -46,7 +46,7 @@ def install_tls(runtime, archive, manifest):
                               "archive_sha256": PYTHON_TLS_SHA256, "files": records}
 
 
-def deploy(home, game, python_embed=None):
+def deploy(home, game, python_embed=None, native_hook=None):
     if home.is_relative_to(REPO):
         raise ValueError("Runtime, configuration and journals must live outside Git.")
     runtime = home / "runtime" / "LunaTranslator_x64"
@@ -59,6 +59,11 @@ def deploy(home, game, python_embed=None):
     files.extend((path, code / "translator/grisaia" / path.name)
                  for path in (REPO / "src/LunaTranslator/translator/grisaia").glob("*.py"))
     files.append((REPO / "extensions/grisaia/selfbuild.py", user / "selfbuild.py"))
+    if native_hook:
+        native_hook = native_hook.resolve()
+        if native_hook.is_relative_to(REPO) or not native_hook.is_file():
+            raise ValueError("Keep the compiled native hook outside Git.")
+        files.append((native_hook, runtime / "files/LunaHook/LunaHook32.dll"))
     manifest_path = home / "runtime-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"schema": 1, "files": {}}
     if python_embed:
@@ -106,6 +111,9 @@ def deploy(home, game, python_embed=None):
         games[0].append(uid)
     settings_path = home / "settings.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8-sig"))
+    if native_hook:
+        settings.update(capture_protocol="grisaia-windows-v1", hook_code="auto:GrisaiaWindows",
+                        hook_validated=False, diagnostic_hooks=[])
     hook = settings["hook_code"]
     game_config = games[1].setdefault(uid, {})
     game_config.update(gamepath=game_exe, title="The Fruit of Grisaia", steamid=345610,
@@ -113,7 +121,7 @@ def deploy(home, game, python_embed=None):
                        hooksetting_follow_default=False,
                        hooksetting_private={"textthreaddelay": 0, "codepage_value": 932,
                                             "maxBufferSize": 65536, "maxHistorySize": 1000000},
-                       needinserthookcode=[hook], inserthooktimeout=500,
+                       needinserthookcode=[] if native_hook else [hook], inserthooktimeout=500,
                        embedablehook=[])
     save_json(games_path, games)
     settings.update(runtime_dir=str(runtime), game_uid=uid)
@@ -138,8 +146,10 @@ def main():
     parser.add_argument("--game-dir", type=Path, required=True)
     parser.add_argument("--python-embed", type=Path,
                         help="Official matching Python archive supplying missing TLS extensions")
+    parser.add_argument("--native-hook", type=Path,
+                        help="Private matching 32-bit LunaHook DLL; close Luna and the game first")
     args = parser.parse_args()
-    deploy(args.home.resolve(), args.game_dir.resolve(), args.python_embed)
+    deploy(args.home.resolve(), args.game_dir.resolve(), args.python_embed, args.native_hook)
 
 
 if __name__ == "__main__":

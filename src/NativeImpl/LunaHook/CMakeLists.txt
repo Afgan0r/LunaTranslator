@@ -48,7 +48,9 @@ endif()
 include(../winxphelper.cmake)
 
 set(CMAKE_FINAL_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/builds/${CMAKE_BUILD_TYPE}_x${bitappendix}${__APP}) 
-set(binary_out_putpath ${CMAKE_SOURCE_DIR}/builds/${CMAKE_BUILD_TYPE}${__APP}) 
+set(LUNA_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/builds/${CMAKE_BUILD_TYPE}${__APP}"
+    CACHE PATH "Directory for native runtime binaries")
+set(binary_out_putpath ${LUNA_OUTPUT_DIRECTORY})
 #set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY $<1:${CMAKE_FINAL_OUTPUT_DIRECTORY}>)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY $<1:${binary_out_putpath}>)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY $<1:${binary_out_putpath}>)

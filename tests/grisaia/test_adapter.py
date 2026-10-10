@@ -32,7 +32,8 @@ class AdapterTests(unittest.TestCase):
         self.game = str(self.home / "Grisaia.exe")
         self.hook = "synthetic-full-window-hook"
         self.settings = {"game_exe": self.game, "hook_code": self.hook,
-                         "hook_validated": True}
+                         "hook_validated": True, "capture_protocol": "grisaia-windows-v1"}
+        self.serial = 0
         self.path = self.home / "settings.json"
         self.path.write_text(json.dumps(self.settings), encoding="utf-8")
         self.ui = SimpleNamespace(displayraw1=Signal(), displayres=Signal())
@@ -75,8 +76,11 @@ class AdapterTests(unittest.TestCase):
         self.addCleanup(adapter.journal.close)
         return adapter
 
-    def capture(self, adapter, text):
-        return adapter.capture_hook_event("game", self.hook, "Script", self.tp, text)
+    def capture(self, adapter, text, speaker="", serial=None):
+        self.serial += 1
+        packet = json.dumps({"schema": 1, "kind": "window", "session": "1:123456",
+                             "serial": serial or self.serial, "text": text, "speaker": speaker})
+        return adapter.capture_hook_event("game", self.hook, "GrisaiaWindows", self.tp, packet)
 
     def test_configuration_outage_retains_new_captures_in_fifo(self):
         adapter = self.adapter()
@@ -95,7 +99,7 @@ class AdapterTests(unittest.TestCase):
         adapter = self.adapter()
         self.assertTrue(self.capture(adapter, "Retained diagnostic window"))
         row = json.loads((self.home / "hook-probe.jsonl").read_text(encoding="utf-8"))
-        self.assertEqual(row["text"], "Retained diagnostic window")
+        self.assertEqual(json.loads(row["text"])["text"], "Retained diagnostic window")
         self.assertEqual(adapter.journal.status()["counts"], {})
 
     def test_bom_configuration_is_valid_capture_routing(self):
@@ -103,6 +107,60 @@ class AdapterTests(unittest.TestCase):
         adapter = self.adapter()
         self.assertTrue(self.capture(adapter, "Captured with BOM configuration"))
         self.assertEqual(adapter.journal.latest_capture()["original"], "Captured with BOM configuration")
+
+    def test_unvalidated_game_streams_are_durable_and_never_enter_api_queue(self):
+        self.settings["hook_validated"] = False
+        self.path.write_text(json.dumps(self.settings), encoding="utf-8")
+        adapter = self.adapter()
+        self.assertTrue(adapter.capture_hook_event("game", "rendered-body", "Body", self.tp, "A complete window"))
+        self.assertTrue(adapter.capture_hook_event("game", "rendered-name", "Name", self.tp, "Speaker"))
+        retained = [json.loads(line) for line in (self.home / "hook-probe.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([r["text"] for r in retained], ["A complete window", "Speaker"])
+        self.assertEqual([r["sequence"] for r in retained], [1, 2])
+        self.assertEqual(retained[0]["instance"], retained[1]["instance"])
+        self.assertEqual(adapter.journal.status()["counts"], {})
+
+    def test_validated_capture_ignores_an_unselected_stream(self):
+        adapter = self.adapter()
+        self.assertTrue(adapter.capture_hook_event("game", "other-hook", "Other", self.tp, "Unselected text"))
+        self.assertEqual(adapter.journal.status()["counts"], {})
+        self.assertFalse((self.home / "hook-probe.jsonl").exists())
+
+    def test_native_serial_suppresses_redraws_and_keeps_real_identical_replies(self):
+        adapter = self.adapter()
+        self.capture(adapter, "Same reply", "Speaker", serial=1)
+        self.capture(adapter, "Same reply", "Speaker", serial=1)
+        self.capture(adapter, "Same reply", "Speaker", serial=2)
+        newest = adapter._latest
+        self.capture(adapter, "Same reply", "Speaker", serial=1)
+        self.assertEqual(adapter.journal.status()["counts"], {"pending": 2})
+        self.assertEqual(adapter._latest, newest)
+        self.assertEqual(len(self.ui.displayraw1.values), 2)
+
+    def test_empty_native_speaker_clears_previous_name(self):
+        adapter = self.adapter()
+        self.capture(adapter, "A spoken line", "Speaker")
+        self.capture(adapter, "A narrative line")
+        self.assertEqual(adapter.journal.latest_capture()["original"], "A narrative line")
+        self.assertEqual(self.base.currenttext, "A narrative line")
+
+    def test_native_duplicate_is_suppressed_after_adapter_restart(self):
+        adapter = self.adapter()
+        self.capture(adapter, "Retained window", serial=1)
+        adapter.journal.close()
+        replacement = self.adapter()
+        self.capture(replacement, "Retained window", serial=1)
+        self.assertEqual(replacement.journal.status()["counts"], {"pending": 1})
+
+    def test_capture_fault_survives_restart_and_later_windows_are_retained(self):
+        adapter = self.adapter()
+        self.assertTrue(adapter.capture_hook_event("game", self.hook, "GrisaiaWindows", self.tp, "invalid packet"))
+        self.assertTrue(adapter._capture_fault)
+        self.capture(adapter, "Captured after fault")
+        adapter.journal.close()
+        replacement = self.adapter()
+        self.assertTrue(replacement._capture_fault)
+        self.assertEqual(replacement.journal.status()["counts"], {"pending": 1})
 
     def test_stopped_worker_cannot_replace_newer_overlay(self):
         adapter = self.adapter()

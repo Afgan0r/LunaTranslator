@@ -57,7 +57,8 @@ update. The generated `Start Luna.cmd` sets the private home and capture route.
 
 Private settings include `key_file`, explicit HTTP `proxy` host/port,
 `expected_country`, optional `expected_region`, `geo_host`, `model`,
-`reasoning_effort`, `game_exe`, `hook_code`, and `hook_validated`. Each new
+`reasoning_effort`, `game_exe`, `hook_code`, `capture_protocol`, and
+`hook_validated`. Each new
 client checks its own HTTPS CONNECT route before reading the key or calling
 OpenAI. Proxy credentials are optional. Redirects, direct fallback and
 automatic retries are disabled.
@@ -77,6 +78,22 @@ preflights every target and backup before restoring the original file state.
 Changed files cause a refusal before any restore.
 
 ## Capture and history
+
+The Steam executable is fingerprinted before attaching `GrisaiaControl` and
+`GrisaiaWindows`. Presentation messages for window IDs 15 and 16 identify the
+body and name. Clear/append messages advance a revision; a snapshot immediately
+after complete layout generation reads both glyph vectors on the game's thread.
+The packet carries an empty name for narration and a native session/serial ID.
+Redraws do not advance that ID; a repeated utterance in a later window does.
+This avoids reading a mutable game buffer after the host has received an event.
+The executable hash and instruction-byte guards prevent attaching these fixed
+addresses to a different executable.
+
+The supported private setting is `capture_protocol: "grisaia-windows-v1"`.
+The adapter consumes other streams of this game and submits only complete
+`GrisaiaWindows` packets. Native IDs suppress duplicate delivery across an
+adapter restart. A malformed packet pauses API processing and is retained in
+a private capture-fault log; later valid windows remain durably queued.
 
 The ordinary Luna queue can discard waiting jobs when newer text arrives.
 An optional bridge intercepts native hook output before that queue and passes
@@ -142,12 +159,37 @@ run boundaries, immutable prefixes, egress guards and patch rollback have
 automated tests using synthetic dialogue. The deployed Luna successfully loads
 the custom translator and creates its private journal.
 
-**Live game acceptance is pending.** The candidate is
-`HSFN932#-4@B2721:Grisaia.exe`, derived from the installed executable's full-string
-scenario path. `hook_validated` remains false. Its raw events are retained in a
-private probe journal and are never sent to OpenAI. Live evidence must establish
-complete window boundaries, speaker association and suppression of repeated
-reads while preserving real replay occurrences. A generated occurrence UUID
-alone does not establish those semantics.
+The custom native state machine also has a C++ test for generation changes,
+redraws, identical later utterances, empty names and JSON escaping. Python tests
+exercise native packet deduplication and speaker clearing against a real journal.
+
+**Live acceptance of the new native hook is pending.** The older
+`HSFN932#-4@B2721:Grisaia.exe` script-reader hook was rejected because it captures
+commands and repeated out-of-order reads. The built-in character hook matches
+visible bodies but leaves its last name in the hook list after the game has
+cleared that name's glyph vector. Its raw events remain private diagnostics.
+`hook_validated` remains false; no diagnostic event is sent to OpenAI.
+
+The new DLL must be installed with Luna and the game closed. Build the matched
+source using MSVC and the compiler's matching ATL headers/libraries. Native
+binaries, build directories and dependency payloads belong outside Git. The
+private build manifest retains compiler, dependency and source hashes.
+
+<!-- markdownlint-disable MD013 -->
+```text
+cmake -S src/NativeImpl/LunaHook -B <private-build> -G "Visual Studio 17 2022" -A Win32 -DBUILD_HOST=OFF -DWIN10ABOVE=ON -DLUNA_OUTPUT_DIRECTORY=<private-native-output>
+cmake --build <private-build> --config Release --target LunaHook
+cmake -S tests/grisaia/native -B <private-native-test-build> -G "Visual Studio 17 2022" -A Win32
+cmake --build <private-native-test-build> --config Release
+ctest --test-dir <private-native-test-build> -C Release --output-on-failure
+python -X utf8 tools/deploy_grisaia.py --home <private-home> --game-dir <installed-game> --native-hook <private-native-output>/LunaHook32.dll
+```
+<!-- markdownlint-enable MD013 -->
+
+Deployment backs up the original DLL and disables the old script-reader and
+diagnostic hooks. Live evidence must verify complete ordered windows, names,
+narration and redraw suppression before enabling translation.
+The retained build and diagnostic checkpoint uses logical artifact ID
+`grisaia-native-window-capture-v1` and the same stable private locator above.
 
 The Codex bridge is deferred to a separate phase.

@@ -1,5 +1,6 @@
 """Install as userconfig/selfbuild.py; all private state lives outside Git."""
 
+import hashlib
 import json
 import os
 import threading
@@ -29,6 +30,8 @@ class TS(basetrans):
         self._stop = threading.Event()
         self._instance = uuid.uuid4().hex
         self._sequence = 0
+        self._probe_requests = set()
+        self._capture_fault = (self.home / "capture-fault.jsonl").exists()
         latest = self.journal.latest_capture()
         self._latest = latest["id"] if latest else None
         self._last_notice = None
@@ -51,7 +54,8 @@ class TS(basetrans):
             if not isinstance(game, str) or not Path(game).is_absolute() or not isinstance(hook, str) or not hook:
                 raise ValueError("Invalid capture routing")
             self._capture_settings = {"game_exe": game, "hook_code": hook,
-                                      "hook_validated": current.get("hook_validated", False) is True}
+                                      "hook_validated": current.get("hook_validated", False) is True,
+                                      "capture_protocol": current.get("capture_protocol")}
         except Exception:
             self._notice("Grisaia: request configuration unavailable; using the last approved capture route."
                          if self._capture_settings else
@@ -63,6 +67,38 @@ class TS(basetrans):
             gobject.base.displayinfomessage(text, "<msg_error_Translator>")
             self._last_notice = text
 
+    def _prepare_probes(self, settings):
+        """Request opt-in diagnostic hooks only for the fingerprinted game."""
+        hooks = settings.get("diagnostic_hooks", [])
+        expected = settings.get("diagnostic_exe_sha256")
+        if not hooks or not expected or settings.get("hook_validated", False):
+            return
+        if not isinstance(hooks, list) or not all(isinstance(h, str) and h for h in hooks):
+            raise ValueError("Invalid diagnostic hooks")
+        source = getattr(gobject.base, "textsource", None)
+        if source is None or not hasattr(source, "Luna_InsertHookCode"):
+            return
+        gamepath = uid2gamepath[source.gameuid] or ""
+        if os.path.normcase(gamepath) != os.path.normcase(settings["game_exe"]):
+            return
+        pids = source.pids.get(source.gameuid, set()).copy()
+        requests = [(pid, hook) for pid in pids for hook in hooks
+                    if (pid, hook) not in self._probe_requests]
+        if not requests:
+            return
+        if hashlib.sha256(Path(gamepath).read_bytes()).hexdigest() != expected:
+            self._notice("Grisaia: diagnostic hooks blocked; executable fingerprint changed.")
+            return
+        for pid, hook in requests:
+            # The host call is void: this records a request, not proof of capture.
+            source.Luna_InsertHookCode(pid, hook)
+            self._probe_requests.add((pid, hook))
+            with (self.home / "hook-probe-insertions.jsonl").open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"time": time.time(), "process_id": pid,
+                                         "hook": hook, "exe_sha256": expected}) + "\n")
+                stream.flush()
+                os.fsync(stream.fileno())
+
     def capture_hook_event(self, gameuid, hookcode, hookname, tp, text):
         settings = self._capture_route()
         if settings is None:
@@ -70,14 +106,17 @@ class TS(basetrans):
         gamepath = uid2gamepath[gameuid] or ""
         if os.path.normcase(gamepath) != os.path.normcase(settings["game_exe"]):
             return False
-        if hookcode != settings.get("hook_code"):
-            return False
-        if not settings.get("hook_validated", False):
+        validated = (settings.get("hook_validated", False) and
+                     settings.get("capture_protocol") == "grisaia-windows-v1")
+        if not validated:
+            # Inspect every stream of this game, including its built-in
+            # rendered-text/name hook, until window semantics are verified.
             # Raw probe events are retained separately until their window
             # boundaries have been verified. They never become API requests.
             with self._capture_lock:
                 self._sequence += 1
                 row = {"time": time.time(), "sequence": self._sequence,
+                       "instance": self._instance, "address": getattr(tp, "addr", 0),
                        "hook": hookcode, "name": hookname, "text": text,
                        "process_id": tp.processId, "context": tp.ctx,
                        "context2": tp.ctx2}
@@ -86,18 +125,40 @@ class TS(basetrans):
                     stream.flush()
                     os.fsync(stream.fileno())
             return True
-        # The configured FULL_STRING script hook emits completed occurrences.
-        # An occurrence is not a text hash: identical script lines stay distinct.
+        # Consume this game's other streams before Luna's lossy stock queue.
+        if hookname != "GrisaiaWindows":
+            return True
+        try:
+            packet = json.loads(text)
+            if (packet.get("schema") != 1 or packet.get("kind") != "window" or
+                    type(packet.get("serial")) is not int or packet["serial"] <= 0 or
+                    not isinstance(packet.get("session"), str) or
+                    not packet["session"].startswith(str(tp.processId) + ":") or
+                    not isinstance(packet.get("text"), str) or not packet["text"].strip() or
+                    not isinstance(packet.get("speaker"), str)):
+                raise ValueError("Invalid window packet")
+            original = (packet["speaker"] + ":\n" if packet["speaker"] else "") + packet["text"]
+            occurrence = "%s:%s" % (packet["session"], packet["serial"])
+        except (ValueError, TypeError, AttributeError, KeyError):
+            with self._capture_lock:
+                self._capture_fault = True
+                with (self.home / "capture-fault.jsonl").open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps({"time": time.time(), "packet": text}) + "\n")
+                    stream.flush()
+                    os.fsync(stream.fileno())
+            self._notice("Grisaia: native window capture failed. Stop advancing; the API queue is paused.")
+            return True
         with self._capture_lock:
-            self._sequence += 1
-            occurrence = "%s:%s" % (self._instance, self._sequence)
-            self._latest = self.journal.capture(text, window_id=occurrence)
+            entry_id = self.journal.capture(original, window_id=occurrence, deduplicate_all=True)
+            if self._latest is not None and entry_id <= self._latest:
+                return True
+            self._latest = entry_id
             base = gobject.base
-            base.currenttext = text
-            base.currenttext_raw = text
+            base.currenttext = original
+            base.currenttext_raw = original
             base.currenttranslate = ""
             base.currenttranslate_1 = ""
-            base.translation_ui.displayraw1.emit(text, True, True)
+            base.translation_ui.displayraw1.emit(original, True, True)
             self._wake.set()
         return True
 
@@ -142,7 +203,11 @@ class TS(basetrans):
             while not self._stop.is_set():
                 try:
                     settings = self._settings()
-                    if not settings.get("hook_validated", False):
+                    if self._capture_fault:
+                        self._notice("Grisaia: native window capture failed. Stop advancing; the API queue is paused.")
+                    elif (not settings.get("hook_validated", False) or
+                          settings.get("capture_protocol") != "grisaia-windows-v1"):
+                        self._prepare_probes(settings)
                         self._notice("Grisaia: hook validation pending; raw events are retained separately.")
                     elif not settings.get("model"):
                         self._notice("Grisaia: choose a model after the benchmark; captures are retained.")

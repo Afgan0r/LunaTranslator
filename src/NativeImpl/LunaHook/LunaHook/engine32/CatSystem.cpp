@@ -1,4 +1,5 @@
 #include "CatSystem.h"
+#include "GrisaiaWindows.h"
 // jichi 5/10/2014
 // See also: http://bbs.sumisora.org/read.php?tid=11044704&fpage=2
 //
@@ -984,6 +985,8 @@ if ( a9 )
 }
 bool CatSystem::attach_function()
 {
+  if (grisaia::attach())
+    return true;
   bool utf8 = false;
   auto b1 = InsertCatSystemHook();
   if (!b1)

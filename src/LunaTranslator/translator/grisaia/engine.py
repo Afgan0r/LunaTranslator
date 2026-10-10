@@ -114,15 +114,19 @@ class Journal:
     def _set_meta(self, key, value):
         self._db.execute("INSERT OR REPLACE INTO meta(key,value) VALUES(?,?)", (key, value))
 
-    def capture(self, text, window_id=None):
+    def capture(self, text, window_id=None, deduplicate_all=False):
         if not isinstance(text, str) or not text.strip():
             raise ValueError("A capture must contain text.")
         with self._transaction():
             run = int(self._get_meta("active_run"))
             if window_id is not None:
-                last = self._db.execute("SELECT id,run_id,window_id FROM events WHERE kind='capture' ORDER BY id DESC LIMIT 1").fetchone()
-                if last and last["run_id"] == run and last["window_id"] == str(window_id):
-                    return last["id"]
+                if deduplicate_all:
+                    previous = self._db.execute("SELECT id,run_id,window_id FROM events WHERE kind='capture' AND run_id=? AND window_id=? LIMIT 1",
+                                                (run, str(window_id))).fetchone()
+                else:
+                    previous = self._db.execute("SELECT id,run_id,window_id FROM events WHERE kind='capture' ORDER BY id DESC LIMIT 1").fetchone()
+                if previous and previous["run_id"] == run and previous["window_id"] == str(window_id):
+                    return previous["id"]
             cursor = self._db.execute("""INSERT INTO events(kind,run_id,original,window_id,state,created)
                 VALUES('capture',?,?,?,'pending',?)""",
                 (run, text,
