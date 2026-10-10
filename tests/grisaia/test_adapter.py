@@ -76,10 +76,11 @@ class AdapterTests(unittest.TestCase):
         self.addCleanup(adapter.journal.close)
         return adapter
 
-    def capture(self, adapter, text, speaker="", serial=None):
+    def capture(self, adapter, text, speaker="", serial=None, render_revision=None):
         self.serial += 1
         packet = json.dumps({"schema": 1, "kind": "window", "session": "1:123456",
-                             "serial": serial or self.serial, "text": text, "speaker": speaker})
+                             "serial": serial or self.serial, "render_revision": render_revision,
+                             "text": text, "speaker": speaker})
         return adapter.capture_hook_event("game", self.hook, "GrisaiaWindows", self.tp, packet)
 
     def test_configuration_outage_retains_new_captures_in_fifo(self):
@@ -143,6 +144,32 @@ class AdapterTests(unittest.TestCase):
         self.capture(adapter, "A narrative line")
         self.assertEqual(adapter.journal.latest_capture()["original"], "A narrative line")
         self.assertEqual(self.base.currenttext, "A narrative line")
+
+    def test_backlog_restoration_stays_one_capture_but_new_run_accepts_loaded_window(self):
+        adapter = self.adapter()
+        self.capture(adapter, "Current window", serial=1, render_revision=10)
+        self.capture(adapter, "Current window", serial=1, render_revision=12)
+        self.capture(adapter, "Current window", serial=1, render_revision=14)
+        self.assertEqual(adapter.journal.status()["counts"], {"pending": 1})
+        adapter.journal.new_run("Older save loaded")
+        self.capture(adapter, "Loaded older window", serial=1, render_revision=16)
+        self.capture(adapter, "Loaded older window", serial=1, render_revision=18)
+        self.assertEqual(adapter.journal.status()["counts"], {"pending": 2})
+        self.assertEqual(adapter.journal.latest_capture()["original"], "Loaded older window")
+        self.assertFalse(adapter._capture_fault)
+        self.assertEqual(len(self.ui.displayraw1.values), 2)
+
+    def test_changed_text_with_same_identity_is_retained_as_a_fault_and_pauses_capture(self):
+        adapter = self.adapter()
+        self.capture(adapter, "Original window", serial=1)
+        self.capture(adapter, "Unexpected replacement", serial=1)
+        self.assertTrue(adapter._capture_fault)
+        retained = json.loads((self.home / "capture-fault.jsonl").read_text(encoding="utf-8"))
+        self.assertEqual(retained["code"], "window_identity_collision")
+        self.assertEqual(json.loads(retained["packet"])["text"], "Unexpected replacement")
+        self.assertEqual(adapter.journal.status()["counts"], {"pending": 1})
+        self.assertEqual(adapter.journal.latest_capture()["original"], "Original window")
+        self.assertEqual(len(self.ui.displayraw1.values), 1)
 
     def test_native_duplicate_is_suppressed_after_adapter_restart(self):
         adapter = self.adapter()

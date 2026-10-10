@@ -6,7 +6,7 @@
 
 namespace grisaia
 {
-  // These are presentation messages, not script-reader or glyph callbacks.
+  // Presentation mutations can also rebuild a window after closing backlog.
   constexpr unsigned bodyWindow = 15, nameWindow = 16;
   constexpr unsigned initialize = 0x1b0, appendText = 0x1b2, clearText = 0x1b3;
 
@@ -37,6 +37,14 @@ namespace grisaia
   {
     uintptr_t bodyParent = 0, nameParent = 0;
     uint64_t revision = 0, sentRevision = 0, serial = 0;
+    uint64_t scriptRevision = 0, sentScriptRevision = 0;
+
+    void observeScript(unsigned id, unsigned message)
+    {
+      if (id == bodyWindow &&
+          (message == initialize || message == appendText || message == clearText))
+        ++scriptRevision;
+    }
 
     void observe(unsigned id, unsigned message, uintptr_t parent)
     {
@@ -59,9 +67,17 @@ namespace grisaia
       if (text.empty() || !bodyParent || !revision || sentRevision == revision)
         return {};
       sentRevision = revision;
-      ++serial;
+      // Reconstructing the same presentation does not execute script commands.
+      // Keep its identity, but emit the snapshot so a manually marked new run
+      // can capture a loaded save even when its text is unchanged.
+      if (!serial || scriptRevision != sentScriptRevision)
+        ++serial;
+      sentScriptRevision = scriptRevision;
       return "{\"schema\":1,\"kind\":\"window\",\"session\":" + jsonString(session) +
-             ",\"serial\":" + std::to_string(serial) + ",\"text\":" + jsonString(text) +
+             ",\"serial\":" + std::to_string(serial) +
+             ",\"render_revision\":" + std::to_string(revision) +
+             ",\"script_revision\":" + std::to_string(scriptRevision) +
+             ",\"text\":" + jsonString(text) +
              ",\"speaker\":" + jsonString(speaker) + "}";
     }
   };

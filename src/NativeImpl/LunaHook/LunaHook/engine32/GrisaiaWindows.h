@@ -114,9 +114,14 @@ namespace grisaia
     const auto base = (uintptr_t)GetModuleHandleW(nullptr);
     constexpr BYTE controlProlog[] = {0x8b, 0x44, 0x24, 0x08, 0x83, 0xec, 0x2c};
     constexpr BYTE renderProlog[] = {0x8b, 0x4e, 0x08, 0xe8, 0x46, 0x3f, 0x00, 0x00};
+    constexpr BYTE scriptCalls[][2] = {{0xff, 0xd2}, {0xff, 0xd2}, {0xff, 0xd0}};
+    constexpr uintptr_t scriptSites[] = {0x9f9a2, 0x9fa2a, 0x9fa64};
     if (memcmp((void *)(base + 0x42000), controlProlog, sizeof(controlProlog)) ||
         memcmp((void *)(base + 0x140b52), renderProlog, sizeof(renderProlog)))
       return false;
+    for (size_t index = 0; index < 3; ++index)
+      if (memcmp((void *)(base + scriptSites[index]), scriptCalls[index], 2))
+        return false;
     static WindowState state;
     static std::mutex mutex;
     static const auto session = []
@@ -126,6 +131,30 @@ namespace grisaia
       uint64_t ticks = (uint64_t(now.dwHighDateTime) << 32) | now.dwLowDateTime;
       return std::to_string(GetCurrentProcessId()) + ":" + std::to_string(ticks);
     }();
+
+    // Observe the script command senders before their virtual dispatch. The
+    // same presentation handler is also called by backlog/save restoration,
+    // so its clear/append messages alone cannot identify a new utterance.
+    for (const auto address : scriptSites)
+    {
+      HookParam script;
+      script.address = base + address;
+      script.type = USING_STRING | CODEC_UTF8 | FULL_STRING | NO_CONTEXT;
+      script.text_fun = [](hook_context *context, HookParam *, TextBuffer *buffer, uintptr_t *)
+      {
+        // This hook is before CALL: stack[0] is the sender, not a return address.
+        const auto id = context->stack[1], message = context->stack[2];
+        if (id != bodyWindow && id != nameWindow)
+          return;
+        std::lock_guard<std::mutex> lock(mutex);
+        state.observeScript(id, message);
+        buffer->from("{\"schema\":1,\"kind\":\"script\",\"window\":" + std::to_string(id) +
+                     ",\"message\":" + std::to_string(message) +
+                     ",\"script_revision\":" + std::to_string(state.scriptRevision) + "}");
+      };
+      if (!NewHook(script, "GrisaiaScript"))
+        return false;
+    }
 
     HookParam control;
     control.address = base + 0x42000;

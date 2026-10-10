@@ -79,12 +79,16 @@ Changed files cause a refusal before any restore.
 
 ## Capture and history
 
-The Steam executable is fingerprinted before attaching `GrisaiaControl` and
-`GrisaiaWindows`. Presentation messages for window IDs 15 and 16 identify the
-body and name. Clear/append messages advance a revision; a snapshot immediately
-after complete layout generation reads both glyph vectors on the game's thread.
+The Steam executable is fingerprinted before attaching `GrisaiaScript`,
+`GrisaiaControl` and `GrisaiaWindows`. Script command senders advance the story
+generation. Presentation messages for window IDs 15 and 16 identify the body
+and name and track layout rebuilding separately. A snapshot immediately after
+complete layout generation reads both glyph vectors on the game's thread.
 The packet carries an empty name for narration and a native session/serial ID.
-Redraws do not advance that ID; a repeated utterance in a later window does.
+Closing the game's backlog can clear and repopulate the same presentation;
+that rebuild keeps its serial. A later script occurrence advances it, even
+when its text is identical. Rebuilt snapshots carry a separate render revision
+so a manual new-run marker can accept a loaded save with unchanged text.
 This avoids reading a mutable game buffer after the host has received an event.
 The executable hash and instruction-byte guards prevent attaching these fixed
 addresses to a different executable.
@@ -92,8 +96,9 @@ addresses to a different executable.
 The supported private setting is `capture_protocol: "grisaia-windows-v1"`.
 The adapter consumes other streams of this game and submits only complete
 `GrisaiaWindows` packets. Native IDs suppress duplicate delivery across an
-adapter restart. A malformed packet pauses API processing and is retained in
-a private capture-fault log; later valid windows remain durably queued.
+adapter restart and backlog restoration. A malformed packet or changed original
+under an already used identity pauses API processing and is retained in a
+private capture-fault log; later valid windows remain durably queued.
 
 The ordinary Luna queue can discard waiting jobs when newer text arrives.
 An optional bridge intercepts native hook output before that queue and passes
@@ -163,7 +168,11 @@ The custom native state machine also has a C++ test for generation changes,
 redraws, identical later utterances, empty names and JSON escaping. Python tests
 exercise native packet deduplication and speaker clearing against a real journal.
 
-**Live acceptance of the new native hook is pending.** The older
+**Live acceptance of the revised native hook is pending.** The initial live
+check captured 16 complete consecutive windows with correct speaker clearing,
+but two returns from the game's backlog incorrectly advanced the serial.
+Script generation is now tracked separately from presentation reconstruction;
+this change still requires live verification before enabling the API. The older
 `HSFN932#-4@B2721:Grisaia.exe` script-reader hook was rejected because it captures
 commands and repeated out-of-order reads. The built-in character hook matches
 visible bodies but leaves its last name in the hook list after the game has

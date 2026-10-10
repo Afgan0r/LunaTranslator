@@ -67,6 +67,14 @@ class TS(basetrans):
             gobject.base.displayinfomessage(text, "<msg_error_Translator>")
             self._last_notice = text
 
+    def _retain_capture_fault(self, text, code="invalid_packet"):
+        # Call under _capture_lock; retain the rejected original before pausing.
+        self._capture_fault = True
+        with (self.home / "capture-fault.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"time": time.time(), "code": code, "packet": text}) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
     def _prepare_probes(self, settings):
         """Request opt-in diagnostic hooks only for the fingerprinted game."""
         hooks = settings.get("diagnostic_hooks", [])
@@ -141,15 +149,15 @@ class TS(basetrans):
             occurrence = "%s:%s" % (packet["session"], packet["serial"])
         except (ValueError, TypeError, AttributeError, KeyError):
             with self._capture_lock:
-                self._capture_fault = True
-                with (self.home / "capture-fault.jsonl").open("a", encoding="utf-8") as stream:
-                    stream.write(json.dumps({"time": time.time(), "packet": text}) + "\n")
-                    stream.flush()
-                    os.fsync(stream.fileno())
+                self._retain_capture_fault(text)
             self._notice("Grisaia: native window capture failed. Stop advancing; the API queue is paused.")
             return True
         with self._capture_lock:
             entry_id = self.journal.capture(original, window_id=occurrence, deduplicate_all=True)
+            if self.journal.entry(entry_id)["original"] != original:
+                self._retain_capture_fault(text, "window_identity_collision")
+                self._notice("Grisaia: native window capture failed. Stop advancing; the API queue is paused.")
+                return True
             if self._latest is not None and entry_id <= self._latest:
                 return True
             self._latest = entry_id
