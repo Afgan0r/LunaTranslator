@@ -87,7 +87,7 @@ empty or invalid field stops the request without trying another credential.
 The client reads credentials only after its egress check succeeds.
 
 The Steam executable is fingerprinted before attaching `GrisaiaScript`,
-`GrisaiaControl` and `GrisaiaWindows`. The current candidate observes the
+`GrisaiaControl` and `GrisaiaWindows`. The validated hook observes the
 scenario separator command as its generation signal. Presentation messages
 for IDs 15 and 16
 identify the body and name and track layout rebuilding separately. A snapshot
@@ -177,26 +177,34 @@ The custom native state machine also has a C++ test for generation changes,
 redraws, identical later utterances, empty names and JSON escaping. Python tests
 exercise native packet deduplication and speaker clearing against a real journal.
 
-**Live acceptance of the revised native hook is pending.** Both the UI-command
-and scenario-frame setter candidates failed to produce script events. The
-second live check captured two different windows and two backlog rebuilds,
-all incorrectly carrying serial 1. Presentation tracing subsequently succeeded
-for 67 stack reads and located both normal updates and history reconstruction
-in the same updater. Source-text writer tracing then observed an extra
-separator command in both new windows, absent from three reconstructions.
-Ordinary replacement and append operations occurred in both cases and are
-unsuitable on their own. The current candidate uses the observed separator
-call site; live verification of its hook is still pending. Temporary stack
-and model-writer tracing has been removed, with its evidence retained privately.
-The API remains disabled. Speaker clearing and complete English bodies have
-been observed. The older
+**The separator hook passed the live advancement/backlog check.** Four complete
+snapshots carried serials `1, 1, 1, 2` and scenario counters `2, 2, 2, 4`:
+two backlog restores retained the original identity, and the next spoken
+window advanced it. Narration had an empty speaker; the next window correctly
+identified Policeman. Earlier UI-command and frame-setter candidates failed;
+ordinary source replacement and append operations also occurred on backlog
+restoration and could not identify new occurrences. Temporary stack and
+model-writer tracing has been removed, with evidence retained privately.
+The older
 `HSFN932#-4@B2721:Grisaia.exe` script-reader hook was rejected because it captures
 commands and repeated out-of-order reads. The built-in character hook matches
 visible bodies but leaves its last name in the hook list after the game has
 cleared that name's glyph vector. Its raw events remain private diagnostics.
-`hook_validated` remains false; no diagnostic event is sent to OpenAI.
+The verified checkpoint is `grisaia-scenario-separator-passed-live-v1` at the
+stable private locator above. The installed hook is enabled. Forty-one verified
+opening windows from two observed game runs were imported in order after
+comparison with the installed English script. Diagnostic rebuilds were excluded.
 
-The new DLL must be installed with Luna and the game closed. Build the matched
+An intentionally unavailable proxy stopped the first request before OpenAI;
+three subsequent captures were retained while paused. Restoring the proxy did
+not retry automatically. Restart also preserved the stopped queue. A manual
+retry with the normal proxy still failed the real Luna client's egress check,
+although an independent host-Python check passed. Production API translation
+and its measured cache usage remain unverified until this mismatch is resolved.
+
+Install the DLL after detaching its hooks and closing Luna. Verify that the
+game no longer has the old module loaded; otherwise close the game before
+replacement. Build the matched
 source using MSVC and the compiler's matching ATL headers/libraries. Native
 binaries, build directories and dependency payloads belong outside Git. The
 private build manifest retains compiler, dependency and source hashes.
