@@ -87,8 +87,9 @@ empty or invalid field stops the request without trying another credential.
 The client reads credentials only after its egress check succeeds.
 
 The Steam executable is fingerprinted before attaching `GrisaiaScript`,
-`GrisaiaControl` and `GrisaiaWindows`. The current candidate observes source-text
-model writes as its generation signal. Presentation messages for IDs 15 and 16
+`GrisaiaControl` and `GrisaiaWindows`. The current candidate observes the
+scenario separator command as its generation signal. Presentation messages
+for IDs 15 and 16
 identify the body and name and track layout rebuilding separately. A snapshot
 immediately after
 complete layout generation reads both glyph vectors on the game's thread.
@@ -181,10 +182,12 @@ and scenario-frame setter candidates failed to produce script events. The
 second live check captured two different windows and two backlog rebuilds,
 all incorrectly carrying serial 1. Presentation tracing subsequently succeeded
 for 67 stack reads and located both normal updates and history reconstruction
-in the same updater. The current candidate observes the model's source-text
-replacement and append operations; their caller metadata must establish the
-difference from backlog restoration before accepting this signal. Address
-tracing remains temporary validation instrumentation.
+in the same updater. Source-text writer tracing then observed an extra
+separator command in both new windows, absent from three reconstructions.
+Ordinary replacement and append operations occurred in both cases and are
+unsuitable on their own. The current candidate uses the observed separator
+call site; live verification of its hook is still pending. Temporary stack
+and model-writer tracing has been removed, with its evidence retained privately.
 The API remains disabled. Speaker clearing and complete English bodies have
 been observed. The older
 `HSFN932#-4@B2721:Grisaia.exe` script-reader hook was rejected because it captures

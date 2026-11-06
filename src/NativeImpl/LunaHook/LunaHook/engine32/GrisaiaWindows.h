@@ -114,16 +114,11 @@ namespace grisaia
     const auto base = (uintptr_t)GetModuleHandleW(nullptr);
     constexpr BYTE controlProlog[] = {0x8b, 0x44, 0x24, 0x08, 0x83, 0xec, 0x2c};
     constexpr BYTE renderProlog[] = {0x8b, 0x4e, 0x08, 0xe8, 0x46, 0x3f, 0x00, 0x00};
-    constexpr BYTE modelPrologs[][9] = {
-        {0x55, 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x10, 0x8b, 0xf1},
-        {0x53, 0x8b, 0x5c, 0x24, 0x08, 0x56, 0x57, 0x8b, 0xf9}};
-    constexpr uintptr_t modelSites[] = {0xd5f30, 0xd5ff0};
+    constexpr BYTE separatorCall[] = {0xe8, 0x31, 0x0a, 0xfe, 0xff};
     if (memcmp((void *)(base + 0x42000), controlProlog, sizeof(controlProlog)) ||
-        memcmp((void *)(base + 0x140b52), renderProlog, sizeof(renderProlog)))
+        memcmp((void *)(base + 0x140b52), renderProlog, sizeof(renderProlog)) ||
+        memcmp((void *)(base + 0xf55ba), separatorCall, sizeof(separatorCall)))
       return false;
-    for (size_t index = 0; index < 2; ++index)
-      if (memcmp((void *)(base + modelSites[index]), modelPrologs[index], 9))
-        return false;
     static WindowState state;
     static std::mutex mutex;
     static const auto session = []
@@ -134,15 +129,13 @@ namespace grisaia
       return std::to_string(GetCurrentProcessId()) + ":" + std::to_string(ticks);
     }();
 
-    // Observe writes to the model's source-text buffer separately from the
-    // presentation updater. Caller metadata must establish whether backlog
-    // restoration also uses these operations before accepting the signal.
-    for (const auto address : modelSites)
+    // Live traces distinguish this scenario separator from ordinary buffer
+    // replacement/append, which backlog restoration also executes.
     {
       HookParam script;
-      script.address = base + address;
+      script.address = base + 0xf55ba;
       script.type = USING_STRING | CODEC_UTF8 | FULL_STRING | NO_CONTEXT;
-      script.text_fun = [](hook_context *context, HookParam *parameter, TextBuffer *buffer, uintptr_t *)
+      script.text_fun = [](hook_context *context, HookParam *, TextBuffer *buffer, uintptr_t *)
       {
         auto id = readWord(context->ecx + 0x3bc);
         if (!id)
@@ -151,13 +144,8 @@ namespace grisaia
           return;
         }
         std::lock_guard<std::mutex> lock(mutex);
-        state.observeScript(*id, appendText);
-        // Keep non-body assignments visible during validation: a filtered-out
-        // event must not be mistaken for an unexecuted hook.
+        state.observeScenarioBoundary(*id);
         buffer->from("{\"schema\":1,\"kind\":\"script\",\"window\":" + std::to_string(*id) +
-                     ",\"model\":" + std::to_string(context->ecx) +
-                     ",\"operation\":" + std::to_string(parameter->address - (uintptr_t)GetModuleHandleW(nullptr)) +
-                     ",\"caller\":" + std::to_string(context->stack[0]) +
                      ",\"script_revision\":" + std::to_string(state.scriptRevision) + "}");
       };
       if (!NewHook(script, "GrisaiaScript"))
@@ -180,26 +168,9 @@ namespace grisaia
       state.observe(*id, message, context->ecx);
       if (message == initialize || message == appendText || message == clearText ||
           message == 0x1b5 || message == 0x1b7 || message == 0x1be)
-      {
-        uint32_t stack[64];
-        const bool stackRead = readMemory((uintptr_t)context->stack, stack, sizeof(stack));
-        std::string codeStack = "[";
-        if (stackRead)
-          for (size_t index = 0; index < 64; ++index)
-            if (stack[index] >= base + 0x1000 && stack[index] < base + 0x25b000)
-            {
-              if (codeStack.size() > 1)
-                codeStack += ',';
-              codeStack += "[" + std::to_string(index) + "," + std::to_string(stack[index] - base) + "]";
-            }
-        codeStack += ']';
         buffer->from("{\"schema\":1,\"kind\":\"control\",\"window\":" + std::to_string(*id) +
                      ",\"message\":" + std::to_string(message) +
-                     ",\"revision\":" + std::to_string(state.revision) +
-                     ",\"caller\":" + std::to_string(context->stack[0] - base) +
-                     ",\"stack_read\":" + (stackRead ? "true" : "false") +
-                     ",\"code_stack\":" + codeStack + "}");
-      }
+                     ",\"revision\":" + std::to_string(state.revision) + "}");
     };
     if (!NewHook(control, "GrisaiaControl"))
       return false;

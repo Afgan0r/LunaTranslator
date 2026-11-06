@@ -39,10 +39,9 @@ namespace grisaia
     uint64_t revision = 0, sentRevision = 0, serial = 0;
     uint64_t scriptRevision = 0, sentScriptRevision = 0;
 
-    void observeScript(unsigned id, unsigned message)
+    void observeScenarioBoundary(unsigned id)
     {
-      if (id == bodyWindow &&
-          (message == initialize || message == appendText || message == clearText))
+      if (id == bodyWindow)
         ++scriptRevision;
     }
 

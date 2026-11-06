@@ -12,9 +12,9 @@ int main()
 {
   grisaia::WindowState state;
   require(!state.commit("session", "Initial", ""));
-  state.observeScript(grisaia::bodyWindow, grisaia::clearText);
+  state.observeScenarioBoundary(grisaia::bodyWindow);
   state.observe(grisaia::bodyWindow, grisaia::clearText, 100);
-  state.observeScript(grisaia::bodyWindow, grisaia::appendText);
+  state.observeScenarioBoundary(grisaia::bodyWindow);
   state.observe(grisaia::bodyWindow, grisaia::appendText, 100);
   auto first = state.commit("session", "Same reply", "Speaker");
   require(bool(first));
@@ -36,18 +36,18 @@ int main()
     require(snapshot->find("\"serial\":1,") != std::string::npos);
   }
   // Name-only commands cannot turn a restored body into a new occurrence.
-  state.observeScript(grisaia::nameWindow, grisaia::appendText);
+  state.observeScenarioBoundary(grisaia::nameWindow);
   require(state.scriptRevision == 2);
-  state.observeScript(grisaia::bodyWindow, grisaia::clearText);
+  state.observeScenarioBoundary(grisaia::bodyWindow);
   state.observe(grisaia::bodyWindow, grisaia::clearText, 100);
-  state.observeScript(grisaia::bodyWindow, grisaia::appendText);
+  state.observeScenarioBoundary(grisaia::bodyWindow);
   state.observe(grisaia::bodyWindow, grisaia::appendText, 100);
   auto repeated = state.commit("session", "Same reply", "Speaker");
   require(bool(repeated) && *repeated != *first && state.serial == 2);
-  state.observeScript(grisaia::bodyWindow, grisaia::clearText);
+  state.observeScenarioBoundary(grisaia::bodyWindow);
   state.observe(grisaia::bodyWindow, grisaia::clearText, 100);
   require(!state.commit("session", "", ""));
-  state.observeScript(grisaia::bodyWindow, grisaia::appendText);
+  state.observeScenarioBoundary(grisaia::bodyWindow);
   state.observe(grisaia::bodyWindow, grisaia::appendText, 100);
   auto narration = state.commit("session", "Narration", "");
   require(bool(narration) && narration->find("\"speaker\":\"\"") != std::string::npos);
@@ -55,6 +55,21 @@ int main()
   state.observe(grisaia::bodyWindow, 0x1b7, 200);
   require(bool(state.commit("session", "Recreated window", "")));
   require(state.serial == serialBeforeRecreation);
+  // Recorded live pattern: a new window emits two scenario separators;
+  // three presentation reconstructions emit none; the next window emits two.
+  // Keep the text identical throughout to rule out content-based deduplication.
+  grisaia::WindowState replay;
+  const unsigned separators[] = {2, 0, 0, 0, 2, 2};
+  const unsigned serials[] = {1, 1, 1, 1, 2, 3};
+  for (size_t index = 0; index < 6; ++index)
+  {
+    for (unsigned marker = 0; marker < separators[index]; ++marker)
+      replay.observeScenarioBoundary(grisaia::bodyWindow);
+    replay.observe(grisaia::bodyWindow, grisaia::clearText, 100);
+    replay.observe(grisaia::bodyWindow, grisaia::appendText, 100);
+    require(bool(replay.commit("replay", "Identical reply", "Speaker")));
+    require(replay.serial == serials[index]);
+  }
   require(grisaia::jsonString("quote\"\\\n") == "\"quote\\\"\\\\\\u000a\"");
   std::cout << "Script generation, backlog restoration, real repeats, empty speaker, and JSON passed.\n";
 }
