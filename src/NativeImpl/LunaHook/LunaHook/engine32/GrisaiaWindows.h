@@ -114,11 +114,16 @@ namespace grisaia
     const auto base = (uintptr_t)GetModuleHandleW(nullptr);
     constexpr BYTE controlProlog[] = {0x8b, 0x44, 0x24, 0x08, 0x83, 0xec, 0x2c};
     constexpr BYTE renderProlog[] = {0x8b, 0x4e, 0x08, 0xe8, 0x46, 0x3f, 0x00, 0x00};
-    constexpr BYTE scenarioProlog[] = {0x8b, 0x44, 0x24, 0x04, 0x89, 0x81, 0x10, 0x05, 0x00, 0x00};
+    constexpr BYTE modelPrologs[][9] = {
+        {0x55, 0x56, 0x57, 0x8b, 0x7c, 0x24, 0x10, 0x8b, 0xf1},
+        {0x53, 0x8b, 0x5c, 0x24, 0x08, 0x56, 0x57, 0x8b, 0xf9}};
+    constexpr uintptr_t modelSites[] = {0xd5f30, 0xd5ff0};
     if (memcmp((void *)(base + 0x42000), controlProlog, sizeof(controlProlog)) ||
-        memcmp((void *)(base + 0x140b52), renderProlog, sizeof(renderProlog)) ||
-        memcmp((void *)(base + 0xd5cf0), scenarioProlog, sizeof(scenarioProlog)))
+        memcmp((void *)(base + 0x140b52), renderProlog, sizeof(renderProlog)))
       return false;
+    for (size_t index = 0; index < 2; ++index)
+      if (memcmp((void *)(base + modelSites[index]), modelPrologs[index], 9))
+        return false;
     static WindowState state;
     static std::mutex mutex;
     static const auto session = []
@@ -129,20 +134,20 @@ namespace grisaia
       return std::to_string(GetCurrentProcessId()) + ":" + std::to_string(ticks);
     }();
 
-    // The scenario interpreter assigns its current frame to the text model.
-    // Its updater also rebuilds presentation after backlog, independently of
-    // that assignment. Observe the model setter, not the separate UI-command
-    // wrappers that the installed scenario did not produce events through.
+    // Observe writes to the model's source-text buffer separately from the
+    // presentation updater. Caller metadata must establish whether backlog
+    // restoration also uses these operations before accepting the signal.
+    for (const auto address : modelSites)
     {
       HookParam script;
-      script.address = base + 0xd5cf0;
+      script.address = base + address;
       script.type = USING_STRING | CODEC_UTF8 | FULL_STRING | NO_CONTEXT;
-      script.text_fun = [](hook_context *context, HookParam *, TextBuffer *buffer, uintptr_t *)
+      script.text_fun = [](hook_context *context, HookParam *parameter, TextBuffer *buffer, uintptr_t *)
       {
         auto id = readWord(context->ecx + 0x3bc);
         if (!id)
         {
-          buffer->from("{\"schema\":1,\"kind\":\"error\",\"code\":\"scenario_model_unavailable\"}");
+          buffer->from("{\"schema\":1,\"kind\":\"error\",\"code\":\"text_model_unavailable\"}");
           return;
         }
         std::lock_guard<std::mutex> lock(mutex);
@@ -151,7 +156,7 @@ namespace grisaia
         // event must not be mistaken for an unexecuted hook.
         buffer->from("{\"schema\":1,\"kind\":\"script\",\"window\":" + std::to_string(*id) +
                      ",\"model\":" + std::to_string(context->ecx) +
-                     ",\"frame\":" + std::to_string(context->stack[1]) +
+                     ",\"operation\":" + std::to_string(parameter->address - (uintptr_t)GetModuleHandleW(nullptr)) +
                      ",\"caller\":" + std::to_string(context->stack[0]) +
                      ",\"script_revision\":" + std::to_string(state.scriptRevision) + "}");
       };
