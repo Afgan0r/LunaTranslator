@@ -214,6 +214,22 @@ requests. Live usage includes measured cache reads and writes. The initial
 route-failure and paired-history-failure checks both preserved later captures
 until manual Retry.
 
+The production acceptance checkpoint completed all 47 retained windows with
+each request starting after the preceding translation committed. Reopening the
+completed journal preserved all results and every reconstructed history prefix.
+The actual New Run control was tested on an isolated copy: it preserved all
+47 translations, accepted the same window in run 3, and survived reopening.
+Production remains on its actual run 2; the control test made no API requests.
+
+Measured production totals were 86,889 input tokens, including 75,904 cached
+reads and 3,411 cache writes, plus 1,603 output tokens. Median API latency was
+2.835 seconds; the standard-rate estimate for successful translations was
+USD 0.2744315. Account credits and invoices remain separate. The private
+receipt and isolated control journal are retained as
+`grisaia-production-acceptance-v1` at the same stable locator. Runtime file
+digests and credential field binding were rechecked; temporary connection
+instrumentation was removed.
+
 Install the DLL after detaching its hooks and closing Luna. Verify that the
 game no longer has the old module loaded; otherwise close the game before
 replacement. Build the matched
