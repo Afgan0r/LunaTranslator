@@ -36,6 +36,7 @@ class ClientConfig:
     max_output_tokens: int = 4096
     geo_host: str = "ipapi.co"
     expected_region: str = None
+    key_field: str = None
 
     @classmethod
     def from_file(cls, path):
@@ -47,7 +48,8 @@ class ClientConfig:
                          model=data.get("model"), reasoning_effort=data.get("reasoning_effort", "low"),
                          proxy_username=proxy.get("username"), proxy_password=proxy.get("password"),
                          timeout=data.get("timeout", 120), max_output_tokens=data.get("max_output_tokens", 4096),
-                         geo_host=data.get("geo_host", "ipapi.co"), expected_region=data.get("expected_region"))
+                         geo_host=data.get("geo_host", "ipapi.co"), expected_region=data.get("expected_region"),
+                         key_field=data.get("key_field"))
             config.validate()
             return config
         except Exception:
@@ -73,6 +75,9 @@ class ClientConfig:
             raise TranslationError("configuration", "Configure a vetted HTTPS geo endpoint.")
         if not isinstance(self.key_file, str) or not Path(self.key_file).is_absolute():
             raise TranslationError("configuration", "API key file must be an absolute external path.")
+        if self.key_field is not None and self.key_field not in (
+                "OPENAI_API_KEY_WITH_SHARING", "OPENAI_API_KEY_WITHOUT_SHARING"):
+            raise TranslationError("configuration", "Select an explicit OpenAI credential field.")
         if (not isinstance(self.timeout, (float, int)) or isinstance(self.timeout, bool) or
                 not 1 <= self.timeout <= 600 or not isinstance(self.max_output_tokens, int) or
                 isinstance(self.max_output_tokens, bool) or self.max_output_tokens < 1):
@@ -207,14 +212,22 @@ class ResponsesClient:
         with self._mutex:
             return self._preflight()
 
+    def _read_key(self):
+        try:
+            raw = Path(self.config.key_file).read_text(encoding="utf-8-sig")
+            key = json.loads(raw)[self.config.key_field] if self.config.key_field else raw.strip()
+            if not isinstance(key, str) or not key or any(c.isspace() for c in key):
+                raise ValueError("Invalid credential")
+            return key
+        except Exception:
+            raise TranslationError("configuration", "Selected API credential is unavailable.") from None
+
     def translate(self, messages, cache_key):
         with self._mutex:
             self._preflight()
             started = time.monotonic()
             try:
-                key = Path(self.config.key_file).read_text(encoding="utf-8-sig").strip()
-                if not key or any(c.isspace() for c in key):
-                    raise TranslationError("configuration")
+                key = self._read_key()
                 body = json.dumps(build_payload(messages, self.config, cache_key), ensure_ascii=False,
                                   separators=(",", ":")).encode("utf-8")
                 status, data = self._request("api.openai.com", "POST", "/v1/responses", body,

@@ -79,6 +79,13 @@ Changed files cause a refusal before any restore.
 
 ## Capture and history
 
+Credentials can come from a standalone text file or a shared JSON file outside
+Git. For JSON, set `key_file` to its absolute path and explicitly select
+`key_field`: `OPENAI_API_KEY_WITH_SHARING` or
+`OPENAI_API_KEY_WITHOUT_SHARING`. Only the selected value is used; a missing,
+empty or invalid field stops the request without trying another credential.
+The client reads credentials only after its egress check succeeds.
+
 The Steam executable is fingerprinted before attaching `GrisaiaScript`,
 `GrisaiaControl` and `GrisaiaWindows`. Script command senders advance the story
 generation. Presentation messages for window IDs 15 and 16 identify the body

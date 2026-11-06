@@ -70,6 +70,35 @@ class TransportTests(unittest.TestCase):
             client.translate([], "key")
             self.assertEqual(client.calls[0][0], "ipapi.co")
 
+    def test_json_credential_uses_only_explicitly_selected_field(self):
+        self.key.write_text(json.dumps({"OPENAI_API_KEY_WITH_SHARING": "selected-synthetic",
+                                       "OPENAI_API_KEY_WITHOUT_SHARING": "other-synthetic"}), encoding="utf-8")
+        config = dataclasses.replace(self.config, key_field="OPENAI_API_KEY_WITH_SHARING")
+        client = ScriptedClient(config, [self.geo, (200, completed())])
+        recorded = []
+        request = client._request
+        def capture_request(host, method, path, body=None, headers=None):
+            if host == "api.openai.com":
+                recorded.append(headers["Authorization"])
+            return request(host, method, path, body, headers)
+        client._request = capture_request
+        client.translate([], "cache")
+        self.assertEqual(recorded, ["Bearer selected-synthetic"])
+
+    def test_missing_or_invalid_json_credential_never_falls_back(self):
+        config = dataclasses.replace(self.config, key_field="OPENAI_API_KEY_WITH_SHARING")
+        for value in (None, "", 123, "has whitespace"):
+            self.key.write_text(json.dumps({"OPENAI_API_KEY_WITH_SHARING": value,
+                                           "OPENAI_API_KEY_WITHOUT_SHARING": "other-synthetic"}), encoding="utf-8")
+            client = ScriptedClient(config, [self.geo])
+            with self.assertRaises(TranslationError) as failure:
+                client.translate([], "cache")
+            self.assertEqual(failure.exception.code, "configuration")
+            self.assertEqual(len(client.calls), 1)
+        self.key.write_text('{"OPENAI_API_KEY_WITHOUT_SHARING":"other-synthetic"}', encoding="utf-8")
+        with self.assertRaises(TranslationError):
+            ScriptedClient(config, [self.geo]).translate([], "cache")
+
     def test_failed_russian_or_disagreeing_geo_never_calls_openai(self):
         for reply in (OSError("proxy password reflected"),
                       (503, {}), (200, {"ip": "8.8.8.8", "country_code": "RU"}),
