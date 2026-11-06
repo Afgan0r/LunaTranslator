@@ -175,13 +175,14 @@ The custom native state machine also has a C++ test for generation changes,
 redraws, identical later utterances, empty names and JSON escaping. Python tests
 exercise native packet deduplication and speaker clearing against a real journal.
 
-**Live acceptance of the revised native hook is pending.** The latest live
-candidate captured 17 different story windows and two backlog rebuilds, but
-incorrectly assigned serial 1 to all of them: its script probes produced no
-events. The replacement observes assignment of the scenario frame to the text
-model, separately from presentation reconstruction. This candidate still needs
-live verification of advancement and backlog returns before enabling the API.
-Speaker clearing and complete English bodies have been observed. The older
+**Live acceptance of the revised native hook is pending.** Both the UI-command
+and scenario-frame setter candidates failed to produce script events. The
+second live check captured two different windows and two backlog rebuilds,
+all incorrectly carrying serial 1. Current validation instrumentation records
+the working presentation handler's caller and module-code addresses from its
+stack to identify the actual execution path before selecting another signal.
+The API remains disabled. Speaker clearing and complete English bodies have
+been observed. The older
 `HSFN932#-4@B2721:Grisaia.exe` script-reader hook was rejected because it captures
 commands and repeated out-of-order reads. The built-in character hook matches
 visible bodies but leaves its last name in the hook list after the game has

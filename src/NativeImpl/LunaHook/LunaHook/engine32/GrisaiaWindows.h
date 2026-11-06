@@ -175,9 +175,26 @@ namespace grisaia
       state.observe(*id, message, context->ecx);
       if (message == initialize || message == appendText || message == clearText ||
           message == 0x1b5 || message == 0x1b7 || message == 0x1be)
+      {
+        uint32_t stack[64];
+        const bool stackRead = readMemory((uintptr_t)context->stack, stack, sizeof(stack));
+        std::string codeStack = "[";
+        if (stackRead)
+          for (size_t index = 0; index < 64; ++index)
+            if (stack[index] >= base + 0x1000 && stack[index] < base + 0x25b000)
+            {
+              if (codeStack.size() > 1)
+                codeStack += ',';
+              codeStack += "[" + std::to_string(index) + "," + std::to_string(stack[index] - base) + "]";
+            }
+        codeStack += ']';
         buffer->from("{\"schema\":1,\"kind\":\"control\",\"window\":" + std::to_string(*id) +
                      ",\"message\":" + std::to_string(message) +
-                     ",\"revision\":" + std::to_string(state.revision) + "}");
+                     ",\"revision\":" + std::to_string(state.revision) +
+                     ",\"caller\":" + std::to_string(context->stack[0] - base) +
+                     ",\"stack_read\":" + (stackRead ? "true" : "false") +
+                     ",\"code_stack\":" + codeStack + "}");
+      }
     };
     if (!NewHook(control, "GrisaiaControl"))
       return false;
