@@ -47,6 +47,13 @@ class TS(basetrans):
     def _settings(self):
         return json.loads(self.settings_path.read_text(encoding="utf-8-sig"))
 
+    def _record_egress(self, public):
+        # Called only after this client's route passed, before reading its key.
+        with (self.home / "egress.jsonl").open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps({"time": time.time(), **public}) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
     def _capture_route(self):
         try:
             current = self._settings()
@@ -222,7 +229,7 @@ class TS(basetrans):
                     else:
                         config = ClientConfig.from_file(self.settings_path)
                         if config != previous_config:
-                            client = ResponsesClient(config)
+                            client = ResponsesClient(config, on_egress=self._record_egress)
                             previous_config = config
                         result = self.journal.process_one(client)
                         if result:

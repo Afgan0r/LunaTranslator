@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import io
 import json
 import shutil
 import sys
@@ -18,7 +19,7 @@ PYTHON_TLS_URL = "https://www.python.org/ftp/python/3.13.13/python-3.13.13-embed
 
 
 def install_tls(runtime, archive, manifest):
-    """Supply missing TLS extensions without replacing Luna's interpreter."""
+    """Supply HTTPS dependencies without replacing Luna's interpreter."""
     if digest(archive) != PYTHON_TLS_SHA256:
         raise ValueError("Expected the official Python 3.13.13 amd64 archive.")
     target_dir = runtime / "files/runtime3.13-64"
@@ -27,6 +28,10 @@ def install_tls(runtime, archive, manifest):
             raise ValueError("Python runtime does not match the TLS archive exactly.")
         assets = [(name, package.read(name)) for name in
                   ("_ssl.pyd", "libssl-3.dll", "libcrypto-3.dll")]
+        # The packaged IDNA codec imports stringprep, which Luna's reduced
+        # stdlib omits. http.client encodes CONNECT hostnames through IDNA.
+        with zipfile.ZipFile(io.BytesIO(package.read("python313.zip"))) as stdlib:
+            assets.append(("stringprep.pyc", stdlib.read("stringprep.pyc")))
         assets.append(("Python-TLS-LICENSE.txt", package.read("LICENSE.txt")))
     records = {}
     for name, content in assets:

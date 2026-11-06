@@ -51,6 +51,11 @@ class JournalTests(unittest.TestCase):
             before, after = client.requests[index:index + 2]
             self.assertEqual(json.dumps(before, ensure_ascii=False), json.dumps(after[:len(before)], ensure_ascii=False))
         self.assertEqual([r[-1]["content"][0]["text"] for r in client.requests], ["First", "Second", "Third"])
+        assistants = [m for m in client.requests[2] if m["role"] == "assistant"]
+        self.assertEqual(assistants, [
+            {"role": "assistant", "content": "Перевод First"},
+            {"role": "assistant", "content": "Перевод Second"},
+        ])
         self.assertNotIn("Second", json.dumps(client.requests[0]))
         self.assertNotIn("Third", json.dumps(client.requests[1]))
         self.assertEqual(self.j.status()["counts"], {"completed": 3})

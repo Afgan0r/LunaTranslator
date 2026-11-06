@@ -22,6 +22,11 @@ Translate only the final user utterance; do not retranslate the history."""
 
 
 def text_message(role, text, breakpoint=False):
+    # Responses accepts manually reconstructed assistant history as plain
+    # text. input_text blocks are for user/developer input, not model output.
+    # https://developers.openai.com/api/docs/guides/conversation-state
+    if role == "assistant":
+        return {"role": role, "content": text}
     block = {"type": "input_text", "text": text}
     if breakpoint:
         block["prompt_cache_breakpoint"] = {"mode": "explicit"}

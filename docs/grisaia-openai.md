@@ -38,8 +38,9 @@ Windows user and SYSTEM. Extract the matched ZIP into
 text file and reference its absolute path in the private `settings.json`.
 Do not read `.env`, `.env.*` or `.secrets` without exact-file authorization.
 
-The supplied runtime omits `_ssl`. The deployment tool can supply `_ssl.pyd`
-and its two OpenSSL dependencies from the
+The supplied runtime omits `_ssl` and `stringprep`, which its packaged IDNA
+codec requires for HTTPS hostnames. The deployment tool supplies `_ssl.pyd`,
+its two OpenSSL dependencies and `stringprep.pyc` from the
 [official Python 3.13.13 amd64 embeddable archive](https://www.python.org/downloads/release/python-31313/).
 It checks the published archive SHA-256 and requires an exact match of
 `python313.dll`; it does not replace Luna's interpreter. The TLS binaries and
@@ -60,7 +61,8 @@ Private settings include `key_file`, explicit HTTP `proxy` host/port,
 `reasoning_effort`, `game_exe`, `hook_code`, `capture_protocol`, and
 `hook_validated`. Each new
 client checks its own HTTPS CONNECT route before reading the key or calling
-OpenAI. Proxy credentials are optional. Redirects, direct fallback and
+OpenAI. Successful checks are committed to the private `egress.jsonl` before
+credential access. Proxy credentials are optional. Redirects, direct fallback and
 automatic retries are disabled.
 
 ## Game patches and rollback
@@ -122,6 +124,9 @@ already have been billed. A stopped worker cannot replace a newer overlay.
 
 Every request contains the immutable developer instructions, run markers,
 all preceding original/translation message pairs, and the current original.
+Prior assistant translations use the documented plain-text assistant-message
+form in [conversation state](https://developers.openai.com/api/docs/guides/conversation-state)
+(accessed 2026-11-06), preserving the text and role without input-only blocks.
 Queued future text is excluded. The original prompt is pinned in the journal;
 changing it in place is refused. Only the current window is translated, with
 prior runs treated as archived context rather than plot knowledge.
@@ -198,9 +203,16 @@ comparison with the installed English script. Diagnostic rebuilds were excluded.
 An intentionally unavailable proxy stopped the first request before OpenAI;
 three subsequent captures were retained while paused. Restoring the proxy did
 not retry automatically. Restart also preserved the stopped queue. A manual
-retry with the normal proxy still failed the real Luna client's egress check,
-although an independent host-Python check passed. Production API translation
-and its measured cache usage remain unverified until this mismatch is resolved.
+retry with the normal proxy exposed a missing `stringprep` dependency in
+Luna's reduced Python library. The exact Python 3.13.13 interpreter reproduced
+both the failed IDNA import and `LookupError`; adding the official module
+restored IDNA and verified HTTPS egress with the installed Luna library.
+The restarted Luna process passed its own route check and translated queued
+windows in order. The first paired-history request exposed an incompatible
+assistant content form; the documented plain-text form restored subsequent
+requests. Live usage includes measured cache reads and writes. The initial
+route-failure and paired-history-failure checks both preserved later captures
+until manual Retry.
 
 Install the DLL after detaching its hooks and closing Luna. Verify that the
 game no longer has the old module loaded; otherwise close the game before
