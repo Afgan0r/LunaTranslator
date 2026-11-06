@@ -88,8 +88,9 @@ The client reads credentials only after its egress check succeeds.
 
 The Steam executable is fingerprinted before attaching `GrisaiaScript`,
 `GrisaiaControl` and `GrisaiaWindows`. The current candidate observes source-text
-model writes as its generation signal. Presentation messages for IDs 15 and 16 identify the body
-and name and track layout rebuilding separately. A snapshot immediately after
+model writes as its generation signal. Presentation messages for IDs 15 and 16
+identify the body and name and track layout rebuilding separately. A snapshot
+immediately after
 complete layout generation reads both glyph vectors on the game's thread.
 The packet carries an empty name for narration and a native session/serial ID.
 Closing the game's backlog can clear and repopulate the same presentation;
