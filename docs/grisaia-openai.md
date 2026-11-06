@@ -87,7 +87,7 @@ empty or invalid field stops the request without trying another credential.
 The client reads credentials only after its egress check succeeds.
 
 The Steam executable is fingerprinted before attaching `GrisaiaScript`,
-`GrisaiaControl` and `GrisaiaWindows`. Script command senders advance the story
+`GrisaiaControl` and `GrisaiaWindows`. Scenario-frame assignments advance the story
 generation. Presentation messages for window IDs 15 and 16 identify the body
 and name and track layout rebuilding separately. A snapshot immediately after
 complete layout generation reads both glyph vectors on the game's thread.
@@ -175,11 +175,13 @@ The custom native state machine also has a C++ test for generation changes,
 redraws, identical later utterances, empty names and JSON escaping. Python tests
 exercise native packet deduplication and speaker clearing against a real journal.
 
-**Live acceptance of the revised native hook is pending.** The initial live
-check captured 16 complete consecutive windows with correct speaker clearing,
-but two returns from the game's backlog incorrectly advanced the serial.
-Script generation is now tracked separately from presentation reconstruction;
-this change still requires live verification before enabling the API. The older
+**Live acceptance of the revised native hook is pending.** The latest live
+candidate captured 17 different story windows and two backlog rebuilds, but
+incorrectly assigned serial 1 to all of them: its script probes produced no
+events. The replacement observes assignment of the scenario frame to the text
+model, separately from presentation reconstruction. This candidate still needs
+live verification of advancement and backlog returns before enabling the API.
+Speaker clearing and complete English bodies have been observed. The older
 `HSFN932#-4@B2721:Grisaia.exe` script-reader hook was rejected because it captures
 commands and repeated out-of-order reads. The built-in character hook matches
 visible bodies but leaves its last name in the hook list after the game has
