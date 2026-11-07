@@ -16,6 +16,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .engine import TranslationError
+from .prompt import CONTEXT_FORMAT
 
 ALLOWED_MODELS = ("gpt-6-astra", "gpt-5.6-terra", "gpt-6.1-sol")
 # Deliberately conservative subset of the official supported-country list.
@@ -242,7 +243,7 @@ class ResponsesClient:
                 key = self._read_key()
                 payload = build_payload(messages, config, cache_key)
                 if json_output:
-                    payload["text"] = {"format": {"type": "json_object"}}
+                    payload["text"] = {"format": CONTEXT_FORMAT}
                 body = json.dumps(payload, ensure_ascii=False,
                                   separators=(",", ":")).encode("utf-8")
                 status, data = self._request("api.openai.com", "POST", "/v1/responses", body,

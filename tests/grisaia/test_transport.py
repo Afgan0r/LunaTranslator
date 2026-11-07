@@ -84,7 +84,11 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(compact["model"], "gpt-6.1-sol")
         self.assertEqual(compact["reasoning"], {"effort": "high"})
         self.assertEqual(compact["prompt_cache_key"], "key-context-v2")
-        self.assertEqual(compact["text"], {"format": {"type": "json_object"}})
+        self.assertEqual(compact["text"]["format"]["type"], "json_schema")
+        self.assertTrue(compact["text"]["format"]["strict"])
+        schema = compact["text"]["format"]["schema"]
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(schema["properties"]["reference_updates"]["type"], "array")
         self.assertEqual(compact["max_output_tokens"], 32768)
         self.assertNotIn("text", normal)
         self.assertEqual(normal["model"], self.config.model)

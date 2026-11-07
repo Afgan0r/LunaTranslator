@@ -155,6 +155,45 @@ class CompactionTests(unittest.TestCase):
         self.assertEqual(repeated["reference"], merged["reference"])
         self.assertEqual(previous["reference"]["person"], ["Identity unknown"])
 
+    def test_multiple_notes_per_subject_and_strict_array_format(self):
+        previous = {"reference": {"person": ["Earlier fact"]}, "events": "Earlier events"}
+        for updates in ({"person": ["New fact", "Correction", "Earlier fact"]},
+                        [{"subject": "person", "notes": ["New fact", "Correction", "Earlier fact"]}]):
+            with self.subTest(updates=updates):
+                result = json.loads(merge_context(previous, json.dumps({
+                    "reference_updates": updates, "events": "Later events"})))
+                self.assertEqual(result["reference"]["person"],
+                                 ["Earlier fact", "New fact", "Correction"])
+        self.assertEqual(previous["reference"]["person"], ["Earlier fact"])
+
+    def test_incremental_list_response_commits_then_translates_fifo_head(self):
+        self.fill(200)
+        original = self.client.compact
+        def list_response(messages, key):
+            original(messages, key)
+            return TranslationResult(json.dumps({"reference_updates": {
+                "character": ["First additional fact", "Second additional fact"]},
+                "events": "Updated events"}), {})
+        self.client.compact = list_response
+        head = self.j.capture("Current after second compact")
+        self.assertEqual(self.j.process_one(self.client)["id"], head)
+        self.assertFalse(self.j.status()["paused"])
+        saved = json.loads(self.j._db.execute(
+            "SELECT text FROM context_checkpoints ORDER BY id DESC LIMIT 1").fetchone()[0])
+        self.assertEqual(saved["reference"]["character"], [
+            "Names and unresolved references retained.",
+            "First additional fact", "Second additional fact"])
+
+    def test_malformed_notes_still_rejected_without_mutating_reference(self):
+        previous = {"reference": {"person": ["Earlier fact"]}, "events": "Earlier events"}
+        for updates in ({"person": ["Good", None]}, {"person": {"nested": "bad"}}, {"person": []},
+                        [{"subject": "person", "notes": [3]}], ["bad"],
+                        [{"subject": "person", "notes": "scalar only allowed in legacy map"}],
+                        [{"subject": "person", "notes": [], "extra": "bad"}]):
+            with self.subTest(updates=updates), self.assertRaises(ValueError):
+                merge_context(previous, json.dumps({"reference_updates": updates, "events": "Later"}))
+        self.assertEqual(previous["reference"]["person"], ["Earlier fact"])
+
     def test_rebuild_uses_full_originals_without_previous_summary_and_preserves_versions(self):
         ids = self.fill(103)
         before = [self.j.entry(i) for i in ids]

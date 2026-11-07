@@ -375,6 +375,29 @@ qualify earlier claims. Exact repeated notes are not appended twice. The last
 20 summarized original/translation pairs also remain verbatim, followed by all
 unsummarized pairs. Each run has its own reference and events.
 
+Context responses use strict
+[Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+(accessed 2026-11-07): `reference_updates` is an array of subject/notes objects,
+and every notes value is a nonempty array of strings. The merge boundary also
+accepts earlier JSON-mode subject maps with scalar or string-list values.
+Malformed or empty notes are still rejected. A diagnostic of the first incremental
+redesign compact returned lists that the original scalar-only merge rejected as
+`invalid_response`, reproducing the reported stop. The original failed response
+was not retained. No checkpoint or dialogue was discarded. The separately
+authorized diagnostic response was retained privately for recovery without
+another paid compaction request.
+
+This repair passed 60 synthetic regression tests and independent code/history
+reviews. A real synthetic request passed the strict schema through the installed
+transport. Recovery verified the retained response's digest, previous-checkpoint
+binding and exact 100 source rows before appending its checkpoint; all earlier
+notes and event rows were preserved. After the owner's manual retry approval,
+installed Luna completed the pending queue through event 1102, reaching 1100
+completed translations. Original captures and all pre-failure history remained
+unchanged. The retained diagnostic artifact is `grisaia-context-diagnostic-v1`,
+located by `<private-home>/checkpoints/context-diagnostic/locator.json`; its state
+is consumed and its API candidate remains available privately.
+
 There is no word-count target or fixed context size. The former 1200-word cap
 is removed. Each context request has a 32,768-token output ceiling including
 reasoning and a socket timeout of at least 300 seconds, leaving translation

@@ -47,7 +47,8 @@ def run_message(run_id):
 
 COMPACTION_PROMPT = """Summarize the supplied translation context for future English-to-Russian
 visual-novel translation. Output a JSON object with exactly two fields:
-"reference_updates": an object mapping stable subject keys to new factual notes;
+"reference_updates": an array of objects with "subject" (stable subject key) and
+"notes" (an array of new factual-note strings);
 "events": a chronological narrative summary of the run so far.
 There is no word-count target or fixed summary size. Preserve necessary detail.
 The reference is cumulative: prior notes are retained verbatim by the application.
@@ -65,21 +66,54 @@ new completed exchanges. This context belongs only to its indicated run.
 Do not translate new dialogue or include Markdown fences around the JSON."""
 
 
+CONTEXT_FORMAT = {
+    "type": "json_schema", "name": "grisaia_context_update", "strict": True,
+    "schema": {
+        "type": "object", "additionalProperties": False,
+        "required": ["reference_updates", "events"],
+        "properties": {
+            "reference_updates": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["subject", "notes"],
+                "properties": {
+                    "subject": {"type": "string", "pattern": "\\S"},
+                    "notes": {"type": "array", "minItems": 1,
+                              "items": {"type": "string", "pattern": "\\S"}},
+                },
+            }},
+            "events": {"type": "string", "pattern": "\\S"},
+        },
+    },
+}
+
+
 def merge_context(previous, response):
     """Keep every prior reference note even when a model omits its subject."""
     data = json.loads(response)
     if not isinstance(data, dict) or set(data) != {"reference_updates", "events"}:
         raise ValueError("Invalid context object")
     updates, events = data["reference_updates"], data["events"]
-    if (not isinstance(updates, dict) or not isinstance(events, str) or not events.strip()
-            or any(not isinstance(k, str) or not k.strip() or not isinstance(v, str)
-                   or not v.strip() for k, v in updates.items())):
+    if not isinstance(events, str) or not events.strip():
         raise ValueError("Invalid context fields")
+    if isinstance(updates, dict):
+        # Legacy JSON-mode replies used subject maps with one or many notes.
+        entries = list(updates.items())
+    elif isinstance(updates, list) and all(
+            isinstance(v, dict) and set(v) == {"subject", "notes"}
+            and isinstance(v["notes"], list) for v in updates):
+        entries = [(v["subject"], v["notes"]) for v in updates]
+    else:
+        raise ValueError("Invalid reference updates")
     reference = {k: list(v) for k, v in previous.get("reference", {}).items()}
-    for key, note in updates.items():
+    for key, value in entries:
+        values = [value] if isinstance(value, str) else value
+        if (not isinstance(key, str) or not key.strip() or not isinstance(values, list) or not values
+                or any(not isinstance(v, str) or not v.strip() for v in values)):
+            raise ValueError("Invalid reference note")
         notes = reference.setdefault(key, [])
-        if note not in notes:
-            notes.append(note)
+        for note in values:
+            if note not in notes:
+                notes.append(note)
     return json.dumps({"reference": reference, "events": events}, ensure_ascii=False)
 
 
