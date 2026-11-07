@@ -1,6 +1,7 @@
 #pragma once
 
 #include "GrisaiaWindowState.h"
+#include "GrisaiaModelRoles.h"
 #include <Wincrypt.h>
 #pragma comment(lib, "advapi32.lib")
 
@@ -66,9 +67,9 @@ namespace grisaia
 
   // Read the completed glyph vector while still on the game's presentation
   // thread. A host-side read could already see the next window during Skip.
-  inline std::optional<std::string> glyphText(uintptr_t parent, uintptr_t base)
+  inline std::optional<std::string> glyphText(uintptr_t parent, uintptr_t base, unsigned id)
   {
-    if (readWord(parent) != base + 0x25dc94)
+    if (readWord(parent) != base + 0x25dc94 || readWord(parent + 4) != id)
       return {};
     auto renderer = readWord(parent + 0x2ac);
     if (!renderer || !*renderer)
@@ -117,7 +118,9 @@ namespace grisaia
     constexpr BYTE separatorCall[] = {0xe8, 0x31, 0x0a, 0xfe, 0xff};
     if (memcmp((void *)(base + 0x42000), controlProlog, sizeof(controlProlog)) ||
         memcmp((void *)(base + 0x140b52), renderProlog, sizeof(renderProlog)) ||
-        memcmp((void *)(base + 0xf55ba), separatorCall, sizeof(separatorCall)))
+        memcmp((void *)(base + 0xf55ba), separatorCall, sizeof(separatorCall)) ||
+        *(BYTE *)(base + 0xf55b3) != 0x68 ||
+        readWord(base + 0xf55b4) != base + 0x267638)
       return false;
     static WindowState state;
     static std::mutex mutex;
@@ -144,8 +147,22 @@ namespace grisaia
           return;
         }
         std::lock_guard<std::mutex> lock(mutex);
+        // Four saved registers plus the pushed separator argument place the
+        // original script-context argument at stack[6], not stack[5].
+        auto scriptContext = readWord(context->stack[6] + 4);
+        auto roles = scriptContext ? modelRoles(*scriptContext, context->ecx, readMemory) :
+                                     std::optional<ModelRoles>();
+        if (!roles)
+        {
+          buffer->from("{\"schema\":1,\"kind\":\"script\",\"window\":" + std::to_string(*id) +
+                       ",\"dialogue_route\":false}");
+          return;
+        }
+        state.bindWindows(roles->body, roles->name);
         state.observeScenarioBoundary(*id);
         buffer->from("{\"schema\":1,\"kind\":\"script\",\"window\":" + std::to_string(*id) +
+                     ",\"name_window\":" + std::to_string(roles->name) +
+                     ",\"dialogue_route\":true" +
                      ",\"script_revision\":" + std::to_string(state.scriptRevision) + "}");
       };
       if (!NewHook(script, "GrisaiaScript"))
@@ -161,11 +178,13 @@ namespace grisaia
       if (readWord(context->ecx) != base + 0x25dc94)
         return;
       auto id = readWord(context->ecx + 4);
-      if (!id || (*id != bodyWindow && *id != nameWindow))
+      if (!id || !*id)
         return;
       const auto message = context->stack[2];
       std::lock_guard<std::mutex> lock(mutex);
       state.observe(*id, message, context->ecx);
+      if (*id != state.bodyWindow && *id != state.nameWindow)
+        return;
       if (message == initialize || message == appendText || message == clearText ||
           message == 0x1b5 || message == 0x1b7 || message == 0x1be)
         buffer->from("{\"schema\":1,\"kind\":\"control\",\"window\":" + std::to_string(*id) +
@@ -186,8 +205,8 @@ namespace grisaia
           readWord(state.bodyParent + 0x2ac) != context->esi)
         return;
       const auto base = (uintptr_t)GetModuleHandleW(nullptr);
-      auto text = glyphText(state.bodyParent, base);
-      auto speaker = glyphText(state.nameParent, base);
+      auto text = glyphText(state.bodyParent, base, state.bodyWindow);
+      auto speaker = glyphText(state.nameParent, base, state.nameWindow);
       if (!text || !speaker)
       {
         buffer->from("{\"schema\":1,\"kind\":\"error\",\"code\":\"capture_unavailable\"}");

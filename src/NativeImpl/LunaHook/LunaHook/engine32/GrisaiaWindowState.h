@@ -1,13 +1,14 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 
 namespace grisaia
 {
   // Presentation mutations can also rebuild a window after closing backlog.
-  constexpr unsigned bodyWindow = 15, nameWindow = 16;
   constexpr unsigned initialize = 0x1b0, appendText = 0x1b2, clearText = 0x1b3;
 
   inline std::string jsonString(const std::string &text)
@@ -35,9 +36,32 @@ namespace grisaia
 
   struct WindowState
   {
+    unsigned bodyWindow = 0, nameWindow = 0;
     uintptr_t bodyParent = 0, nameParent = 0;
     uint64_t revision = 0, sentRevision = 0, serial = 0;
     uint64_t scriptRevision = 0, sentScriptRevision = 0;
+
+    // A role can be resolved after its first presentation message. Retain only
+    // recent parent identities, never text, until the engine supplies the route.
+    std::array<std::pair<unsigned, uintptr_t>, 64> parents{};
+    size_t nextParent = 0;
+
+    void bindWindows(unsigned body, unsigned name)
+    {
+      if (bodyWindow == body && nameWindow == name)
+        return;
+      bodyWindow = body;
+      nameWindow = name;
+      bodyParent = nameParent = 0;
+      for (const auto &entry : parents)
+      {
+        if (entry.first == body)
+          bodyParent = entry.second;
+        if (entry.first == name)
+          nameParent = entry.second;
+      }
+      ++revision;
+    }
 
     void observeScenarioBoundary(unsigned id)
     {
@@ -47,6 +71,19 @@ namespace grisaia
 
     void observe(unsigned id, unsigned message, uintptr_t parent)
     {
+      auto found = false;
+      for (auto &entry : parents)
+        if (entry.first == id)
+        {
+          entry.second = parent;
+          found = true;
+          break;
+        }
+      if (!found)
+      {
+        parents[nextParent] = {id, parent};
+        nextParent = (nextParent + 1) % parents.size();
+      }
       if (id == nameWindow)
         nameParent = parent;
       if (id != bodyWindow)

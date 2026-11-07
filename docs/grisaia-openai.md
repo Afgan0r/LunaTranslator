@@ -126,9 +126,11 @@ The client reads credentials only after its egress check succeeds.
 
 The Steam executable is fingerprinted before attaching `GrisaiaScript`,
 `GrisaiaControl` and `GrisaiaWindows`. The validated hook observes the
-scenario separator command as its generation signal. Presentation messages
-for IDs 15 and 16
-identify the body and name and track layout rebuilding separately. A snapshot
+scenario separator command as its generation signal. Its active `str[0]` and
+`name[0]` model aliases identify the body and speaker; their presentation IDs
+can change when the game recreates its windows. The native hook reads the engine's
+model registry and requires text models with a shared owner and distinct IDs.
+Presentation messages track layout rebuilding separately. A snapshot
 immediately after
 complete layout generation reads both glyph vectors on the game's thread.
 The packet carries an empty name for narration and a native session/serial ID.
@@ -289,5 +291,29 @@ diagnostic hooks. Live evidence must verify complete ordered windows, names,
 narration and redraw suppression before enabling translation.
 The retained build and diagnostic checkpoint uses logical artifact ID
 `grisaia-native-window-capture-v1` and the same stable private locator above.
+
+The dynamic-role recovery check resolved body/name IDs `100/101` without a
+numeric allowlist. Live window serials were `1, 1, 2`: backlog restoration
+preserved the first original and identity, and the next narration cleared its
+speaker. Eight missed windows and
+the two diagnostic windows were verified against the exact loaded patched
+`op.cst`, then translated in FIFO order with one request each. All 120 previous
+event rows retained their exact stored values, and the journal
+reached 128 completed captures in run 2. This checkpoint is
+`grisaia-dynamic-scene-roles-v1`; its machine-local locator is
+`F:\LunaTranslator-Grisaia\checkpoints\scene-role-v1\locator.json`.
+
+For this recovery change only, the owner approved an exception to the 100%
+measured coverage target. It covers `GrisaiaModelRoles.h`,
+`GrisaiaWindowState.h` and `GrisaiaWindows.h` under
+`src/NativeImpl/LunaHook/LunaHook/engine32/`, plus
+`tests/grisaia/native/window_state.cpp`, `tools/deploy_grisaia.py` and
+`tests/grisaia/test_deploy_grisaia.py`. The pure native logic and its test
+measured 97.84% lines, 68.39% branches and 100% functions on LLVM x64. The
+installed LLVM lacks the x86 profiling runtime; production x86 and Python
+full-file coverage remain unmeasured. Alternative acceptance evidence is the
+44-test Python suite, native CTest, matching MSVC x86 build, independent reviews
+and the live capture/recovery check above. Reconsider this exception on the
+next change to these files; it is not a general coverage exemption.
 
 The Codex bridge is deferred to a separate phase.

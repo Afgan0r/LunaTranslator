@@ -135,13 +135,15 @@ def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None):
         settings.update(capture_protocol="grisaia-windows-v1", hook_code="auto:GrisaiaWindows",
                         hook_validated=False, diagnostic_hooks=[])
     hook = settings["hook_code"]
+    automatic_capture = (settings.get("capture_protocol") == "grisaia-windows-v1" and
+                         hook == "auto:GrisaiaWindows")
     game_config = games[1].setdefault(uid, {})
     game_config.update(gamepath=game_exe, title="The Fruit of Grisaia", steamid=345610,
                        lang_follow_default=False, private_srclang_2="en", private_tgtlang_2="ru",
                        hooksetting_follow_default=False,
                        hooksetting_private={"textthreaddelay": 0, "codepage_value": 932,
                                             "maxBufferSize": 65536, "maxHistorySize": 1000000},
-                       needinserthookcode=[] if native_hook else [hook], inserthooktimeout=500,
+                       needinserthookcode=[] if automatic_capture else [hook], inserthooktimeout=500,
                        embedablehook=[])
     save_json(games_path, games)
     settings.update(runtime_dir=str(runtime), game_uid=uid)
