@@ -18,13 +18,21 @@ fingerprint or hook rules to other games.
 
 ## Verify the actual crossing
 
+First apply the engineering contract's ownership scope and Upstream update
+acceptance. During upstream updates, never require or run live game or real
+translation-API acceptance, even after integration changes. Complete the
+required builds, synthetic tests, safe deployment and installed startup check;
+report game/API behavior as untested. Do not tour imported upstream screens.
+The general real-crossing requirements below apply outside that update exception.
+
 Exercise the changed producer and consumer together, including malformed
 input, failure, and recovery as applicable. Native changes require the
 matching MSVC/ATL build with output outside Git; capture changes also require
 native state-machine checks. Qt, embedded Python, hook callbacks, packet
 transit, launcher, and other changed boundaries require their actual host
-scenario in addition to isolated tests. Rendered UI states require visual
-checks. Use the documented procedures rather than treating an old checkpoint
+scenario in addition to isolated tests. Our own UI changes require rendered
+checks of affected states. Use the documented procedures rather than treating
+an old checkpoint
 or a successful import as current live evidence.
 
 For authorized deployment, use the repository deployment tool and manifest;

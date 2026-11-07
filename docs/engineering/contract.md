@@ -7,15 +7,68 @@ work in this personal fork. Read the root `AGENTS.md` and the complete
 `docs/agent-memory.md` first. The memory contract owns its lifecycle; this
 document grants no memory, credential, game, deployment, or publication authority.
 
-Development uses **fast** mode with incremental adoption. Required user behavior
-and protected state determine acceptance. Existing code is not automatically
-compliant, and old code is not automatically excluded. Record unmet requirements
-and exact owner-approved exceptions in the task's existing evidence. Do not
-describe partial migration as whole-project compliance.
+Development uses **fast** mode with the code-ownership scope below. Required
+user behavior and protected state determine acceptance. Record unmet applicable
+requirements and exact owner-approved exceptions in the task's existing evidence.
+Do not describe partial adoption as whole-project compliance.
 
 Use [verification](verification.md) to distinguish executable baseline checks
 from migration work. Skills and repository instructions are canonical here;
 ordinary tasks do not need the author's private standards or profiles.
+
+## Code ownership and change scope
+
+Classify code by provenance and responsibility, not its directory or whether
+Git marks it added or changed:
+
+- **Inherited upstream code:** preserve its structure and style. Do not refactor,
+  split, reformat, or add coverage solely to meet this fork's engineering
+  standards. The 500-line cap and 100% coverage target do not apply to it,
+  including code imported by an upstream merge.
+- **Fork patches in inherited files:** keep the patch small and verify its
+  changed behavior and integration. A bridge, bug fix, or conflict resolution
+  does not require migrating the surrounding file to the full standard.
+- **Independently authored extensions:** apply the full standard to existing
+  and future custom modules when working on them, including their adapters,
+  tests and tools. This includes the Grisaia core under `src/LunaTranslator`,
+  `extensions/grisaia`, and custom native helpers. A copied or moved upstream
+  file does not become independently authored code merely by changing its path.
+
+Keep substantial new extension logic separate from upstream integration sites
+where practical. Do not hide a new custom subsystem in an inherited file to
+evade its own obligations. Preserve attribution and notices; inherited project
+code is not relabeled as vendor or generated code.
+
+For an upstream update, unchanged custom modules need their existing regression
+tests, not a new migration to coverage or size compliance. When a custom module
+is changed, apply the full requirements to that affected module and its relevant
+tests/adapters, rather than only the edited lines. Preserve existing approved
+exceptions and their exact scope and revisit conditions. This boundary does not
+waive failed regression tests or claim that unchanged modules are compliant.
+
+## Upstream update acceptance
+
+An explicit request to update upstream includes preparing the installed version
+for use: merge while preserving fork changes, run the canonical gate and
+applicable synthetic regression checks, build the native targets needed by the
+new version, deploy through the existing manifest-managed tools with backups,
+and verify startup of the updated installed Luna. A source merge, commit, push,
+or successful build alone is not a completed application update. A request
+explicitly limited to source work retains that narrower scope.
+
+Do not run live game or real translation-API acceptance checks during an
+upstream update, even when capture or translation integration changed. The owner
+accepts discovering functional regressions during ordinary use and requesting
+a separate repair. These unperformed checks do not block update acceptance;
+report them as not performed, never as passed. Perform the startup check without
+triggering game capture or real translation requests. Unavailable build,
+deployment, or startup evidence still leaves the update incomplete.
+
+Do not tour imported upstream screens. Rendered checks apply to UI behavior
+changed by our own patches or extension work and only its affected states.
+These update-specific acceptance rules take precedence over the general
+real-boundary requirements below. They do not waive protected-state, credential,
+deployment-integrity, review, or applicable automated-test requirements.
 
 ## Fast workflow
 
@@ -82,11 +135,13 @@ consumer is required. Avoid splitting files while retaining the same coupling.
 Choose mechanisms from this Python/Qt/C++ application, without adding a framework
 or rewriting inherited software solely to match a language preference.
 
-Owned source, tests, and service scripts have a 500-physical-line limit after the
-canonical formatter, counting comments and blanks. Generated output, verified
-third-party code, documentation and data are distinct categories; generators and
-mixed authored files remain owned. Over-limit code needs cohesive decomposition
-or an exact approved exception. Do not compress lines, delete useful behavior or
+Independently authored source, tests, and service scripts in the applicable
+change scope have a 500-physical-line limit after the canonical formatter,
+counting comments and blanks. Generated output, verified third-party code,
+documentation and data are distinct categories; custom generators remain owned.
+Use the ownership rules above for mixed inherited files. Over-limit code needs
+cohesive decomposition or an exact approved exception. Do not compress lines,
+delete useful behavior or
 change formatting to evade the limit. Current formatting and enforcement gaps
 are listed in [verification](verification.md).
 
@@ -126,13 +181,16 @@ establish behavior. Before changing a failing expectation, determine whether the
 implementation, expectation, or agreed behavior is wrong. Review weakened/deleted
 tests, fixtures, exclusions and discovery as well as new assertions.
 
-The target is 100% of every applicable coverage metric over all owned executable
-code, including adapters, error paths, tests and scripts. Inventory files that
+For independently authored modules in the applicable change scope, the target
+is 100% of every applicable coverage metric over their executable code, including
+adapters, error paths, tests and scripts. Inventory files that
 tests never import, target/runtime combinations, lines/statements, functions,
 branches and other supported counters. A default coverage report is insufficient.
 Unsupported measurement requires an exact code/metric/runtime exception with
 mandatory alternative evidence; never label alternatives as measured 100%.
-Incremental adoption does not itself approve exclusions or lower this target.
+The ownership and unchanged-module boundaries above determine applicability;
+they do not turn unmeasured coverage into a pass or lower this target within
+an affected independently authored module.
 
 Use implementation-independent properties when meaningful input/action domains
 exist. Changes to persistent state, cancellation, repeated work or external
@@ -165,7 +223,8 @@ Changes to Qt publication/lifecycle, embedded Python dependencies, native packet
 transit, hook attachment, launcher behavior, or deployment require the affected
 real boundary in addition to isolated tests. Native changes need matching
 MSVC/ATL builds; capture changes also need the native state-machine tests.
-UI changes require rendered evidence of affected states. Follow
+Our own UI changes require rendered evidence of affected states. Apply
+the upstream-update acceptance above before requiring game/API evidence. Follow
 `docs/grisaia-openai.md` for Grisaia procedures and external runtime boundaries.
 
 If a required host, build, measurement or review source is unavailable, prepare

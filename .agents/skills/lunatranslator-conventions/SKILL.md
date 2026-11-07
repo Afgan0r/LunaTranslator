@@ -23,6 +23,11 @@ review.
 
 ## Implement and verify
 
+Classify the task through the engineering contract's Code ownership and change
+scope before applying requirements. Keep upstream edits minimal; verify fork
+patches without migrating their surrounding files. Apply the full standard to
+affected independently authored modules, including existing ones.
+
 Apply the engineering contract's responsibilities, dependency directions,
 protected behavior, diagnostics, and fast workflow to the changed scope. Keep
 game-specific identity and capture rules within their adapters. Resolve
@@ -35,4 +40,7 @@ the hook does not cover. Use `lunatranslator-review` for substantive
 completion. Separate code checks from native builds, deployment,
 and observed live behavior. Missing mandatory checks or real-boundary evidence
 leave acceptance awaiting verification or an exact owner-approved exception;
-existing adoption gaps are not evidence of compliance.
+existing adoption gaps are not evidence of compliance. For upstream updates,
+apply the contract's installed-update acceptance and explicit exclusions before
+requiring extra evidence; do not turn unchanged custom modules into a migration
+prerequisite.

@@ -24,12 +24,14 @@ fixtures, exclusions, and discovery.
 
 ## Measure and report
 
-Apply the full owned-code denominator and 100% target for every applicable
-counter, including tests and scripts, as defined in the engineering contract.
-Inventory unimported files and relevant runtimes. An unsupported metric needs
-an exact code/metric/runtime exception and alternative evidence; never present
-an alternative as measured coverage. Incremental adoption does not approve
-exclusions.
+Resolve the denominator through the engineering contract's Code ownership and
+change scope. Apply its full-module 100% target to affected independently
+authored modules, including tests and scripts, not whole inherited files with
+small patches. Inventory unimported files and relevant runtimes within that
+scope. An unsupported metric needs an exact code/metric/runtime exception and
+alternative evidence; never present an alternative as measured coverage.
+Preserve approved exceptions. For upstream updates, run existing regression
+tests without requiring coverage/size migration of unchanged custom modules.
 
 Run the existing checks declared by `.githooks/pre-push` once, plus any
 additional affected checks in `docs/engineering/verification.md` that
@@ -39,3 +41,6 @@ Qt, embedded runtime, native, game, API, and deployment evidence. Record
 commands, results, source identity, missing checks, and their effect on
 acceptance. Mutation, fuzz, and benchmark campaigns require explicit scope and
 budget approval.
+Apply the contract's Upstream update acceptance before requiring live game/API
+checks. Those checks are excluded during updates even when integration changed;
+report the exclusion without claiming live behavior passed.

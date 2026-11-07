@@ -15,6 +15,10 @@ task, fixed base, reviewed source identity, complete diff, allowed effects,
 and mandatory evidence. If requirements are missing, retrieve the original
 task; withhold the requirements verdict until sufficient evidence exists. A
 sufficient original task does not need an additional specification.
+Classify the reviewed code through the engineering contract's ownership scope.
+Do not demand whole-file compliance for small upstream patches or coverage/size
+migration of unchanged custom modules during updates. Use its Upstream update
+acceptance when assessing build, deployment, startup, UI and excluded live checks.
 
 ## Independent discovery
 

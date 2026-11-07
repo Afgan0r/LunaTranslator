@@ -12,7 +12,9 @@ The original repository history is preserved. `upstream` points to
 The personal branch is `main`; the earlier `grisaia-openai` branch remains
 in local history. `origin` points to
 [Afgan0r/LunaTranslator](https://github.com/Afgan0r/LunaTranslator).
-Upstream merges and local runtime updates require a separate explicit request.
+Upstream updates require an explicit request. Unless explicitly source-only,
+that request includes the installed-version workflow in
+[Upstream update acceptance](engineering/contract.md#upstream-update-acceptance).
 Binary releases are not part of this personal workflow.
 
 The supplied x64 ZIP matches source revision
@@ -30,8 +32,10 @@ git merge upstream/main
 python -X utf8 -m unittest discover -s tests/grisaia -v
 ```
 
-Match a new runtime ZIP to its source before deployment. Recheck the three
-bridge sites and native hook after updates; the custom engine remains separate.
+Match a new runtime ZIP to its source before deployment. Review the three
+bridge sites and native hook for compatibility after updates; the custom engine
+remains separate. Follow the engineering contract's code-ownership scope;
+an update does not require restructuring inherited files.
 
 ## Local fork behavior
 
@@ -44,7 +48,11 @@ The original binary updater is disabled at startup and shutdown, including
 installation of previously cached upstream packages. The language selector
 and update controls are removed from About; theme controls remain available.
 Updates consist of an explicitly requested source merge, checks, native build
-where needed, and manifest-managed deployment to the existing private runtime.
+where needed, and manifest-managed deployment to the existing private runtime,
+followed by startup verification of that installed version. Live game and real
+translation-API checks are excluded from upstream-update acceptance even when
+integration code changes. Functional regressions noticed during use are handled
+in a separately requested repair. Do not claim unperformed live checks passed.
 
 The local launcher permits modified files without a confirmation dialog.
 It retains startup failures for missing required Python files, a missing
@@ -287,8 +295,10 @@ python -X utf8 tools/deploy_grisaia.py --home <private-home> --game-dir <install
 <!-- markdownlint-enable MD013 -->
 
 Deployment backs up the original DLL and disables the old script-reader and
-diagnostic hooks. Live evidence must verify complete ordered windows, names,
-narration and redraw suppression before enabling translation.
+diagnostic hooks. For separately requested capture development or recovery,
+live acceptance verifies complete ordered windows, names, narration and redraw
+suppression before enabling translation. This is not an upstream-update gate;
+apply the engineering contract's update exception.
 The retained build and diagnostic checkpoint uses logical artifact ID
 `grisaia-native-window-capture-v1` and the same stable private locator above.
 

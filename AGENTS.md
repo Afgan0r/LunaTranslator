@@ -40,6 +40,12 @@ skill entrypoints below. Follow their required and conditional reads.
 
 <!-- markdownlint-enable MD013 -->
 
+Before applying engineering requirements, classify inherited code, fork patches,
+and independently authored extensions through
+`docs/engineering/contract.md` (Code ownership and change scope). That contract
+also owns the complete installed-update acceptance and its live-check exception;
+apply it before treating a missing check as a blocker.
+
 For these four skills, agents may autonomously correct verified factual errors
 and clarify already accepted requirements. New obligations, prohibitions,
 exceptions, architecture restrictions, and acceptance changes require owner
@@ -70,6 +76,9 @@ code, memory contracts, live systems or publication.
 `Afgan0r/LunaTranslator`. Personal changes are maintained on `main`.
 Preserve upstream history and integrate upstream by merge only when the user
 explicitly requests an update. A freshness fetch is not permission to merge.
+Unless the request is explicitly source-only, an upstream update includes the
+necessary builds, safe deployment and installed startup verification defined
+in the engineering contract; commit and push alone do not complete it.
 
 The original binary updater is disabled. Do not download or install upstream
 updates automatically, including cached packages. No release-publication
@@ -109,11 +118,14 @@ python -X utf8 -m unittest discover -s tests/grisaia -p 'test_*.py'
 Compile changed Python files and run `git diff --check`. Build changed native
 targets with the matching MSVC/ATL toolchain; keep output outside Git through
 `LUNA_OUTPUT_DIRECTORY`. Run the native Grisaia state-machine tests when its
-capture code changes. UI changes require rendered checks of the affected
-screen and relevant states, not source-only approval.
+capture code changes. Our own UI changes require rendered checks of affected
+states; imported upstream screens do not require a general visual tour.
 
-Use synthetic dialogue in tests. Live capture acceptance is distinct from
-unit-test success; report unperformed checks explicitly. Do not restart the
+Use synthetic dialogue in tests. For upstream updates, do not run live game or
+real translation-API acceptance checks, including after integration changes;
+use the engineering contract's update acceptance. Separately requested live
+capture acceptance is distinct from unit-test success; report unperformed
+checks explicitly. Do not restart the
 game when detaching hooks and restarting Luna is sufficient. Before replacing
 a loaded DLL, verify it has actually unloaded.
 

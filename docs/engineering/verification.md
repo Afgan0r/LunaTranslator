@@ -45,30 +45,39 @@ CTest. The full commands and native deployment procedure are in
 `docs/grisaia-openai.md`. A pure state-machine pass does not verify executable
 fingerprints, memory layouts, hook callbacks or real packet transit.
 
-Native changes require affected MSVC/ATL builds; UI changes require rendered
-checks. Run required real-boundary scenarios under task-specific authority.
+Native changes require affected MSVC/ATL builds; our own UI changes require
+rendered checks of affected states. Apply the engineering contract's
+[upstream update acceptance](contract.md#upstream-update-acceptance) instead of
+requiring live game/API checks or a tour of imported upstream screens.
+Run other required real-boundary scenarios under task-specific authority.
 Retain compiler/source/dependency identities and outputs outside Git.
 A missing toolchain or real host leaves the affected check awaiting verification.
 
 ## Incremental adoption
 
 The local hook is a baseline, not proof of full engineering adoption.
-[The engineering contract](contract.md) retains the complete owned-code coverage,
-source-size, architecture, diagnostics and behavioral requirements. Existing
-application formatter/lint/type/dependency/coverage enforcement remains migration
-work. Do not claim that a passing hook satisfies missing mandatory checks.
+[The engineering contract](contract.md#code-ownership-and-change-scope) defines
+the inherited-code, fork-patch and custom-module boundaries before applying
+coverage, size, architecture, diagnostics and behavioral requirements. Remaining
+formatter/lint/type/dependency/coverage enforcement for custom modules is
+adoption work, not an obligation to migrate upstream. A passing hook does not
+prove whole-application compliance or satisfy missing applicable checks.
 
 The documented Grisaia runtime is Windows with Python 3.13.13 x64 and an x86
 game hook. Preserve inherited older runtime/build capabilities when modifying
 shared code; custom support is not inferred from upstream Python 3.7 packaging.
 
-Existing custom modules, tools, tests and native adapters remain owned code.
-Inherited first-party files remain first-party. Mixed adapted/authored files
-retain notices and authored-code obligations; do not relabel them as vendor.
+Existing and future independently authored modules, tools, tests and native
+adapters retain the full standard when worked on. An upstream update runs
+existing regression tests without forcing unchanged custom modules into a new
+coverage/size migration. Small patches do not bring whole inherited files into
+that denominator. Preserve notices and classify by actual provenance, not by
+relabeling inherited code as vendor.
 
-Legacy exceptions require exact paths, requirements/metrics/runtimes,
-alternative checks, approval and revisit conditions. Incremental adoption does
-not automatically approve exclusions or change the 100% coverage target.
+Within affected custom modules, measurement exceptions still require exact
+paths, metrics/runtimes, alternative checks, approval and revisit conditions.
+Preserve the recovery-specific exception recorded in `docs/grisaia-openai.md`;
+the update policy neither revokes it nor expands it to other development.
 
 ## Completion evidence
 
