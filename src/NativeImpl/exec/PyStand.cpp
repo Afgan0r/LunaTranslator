@@ -16,7 +16,11 @@
 #include <softpub.h>
 #include <array>
 #include "../common.hpp"
+#ifdef LUNA_CHECKSIGS_HEADER
+#include LUNA_CHECKSIGS_HEADER
+#else
 #include "checksigs.hpp"
+#endif
 extern "C"
 {
 #include "WjCryptLib_Sha256.h"
@@ -99,7 +103,7 @@ bool PyStand::CheckEnviron(const wchar_t *rtp)
 
 	if (_runtime.find(LR"(\AppData\Local\Temp\)") != _runtime.npos)
 	{
-		std::wstring msg = L"请先解压后再运行！\nPlease decompress before running!";
+		std::wstring msg = L"Please extract the archive before running!";
 		MessageBoxW(NULL, msg.c_str(), L"ERROR", MB_OK | MB_SYSTEMMODAL);
 		return false;
 	}
@@ -544,12 +548,10 @@ std::set<const wchar_t *> PyStand::checkintegrity_(int &succ)
 bool PyStand::checkintegrity()
 {
 	int succ = 1;
-	auto invalidfiles = checkintegrity_(succ);
+	checkintegrity_(succ);
 	if (succ == -1)
 	{
 		std::wstringstream ss;
-		ss << L"主程序已被篡改，无法运行 ！";
-		ss << L"\n";
 		ss << L"The main program has been tampered with and cannot run!";
 		MessageBoxW(0, ss.str().c_str(), L"Error", MB_SYSTEMMODAL);
 		return false;
@@ -557,47 +559,11 @@ bool PyStand::checkintegrity()
 	else if (succ == -2)
 	{
 		std::wstringstream ss;
-		ss << L"部分文件丢失，无法运行 ！";
-		ss << L"\n";
 		ss << L"Some program files lost, cannot run!";
 		MessageBoxW(0, ss.str().c_str(), L"Error", MB_SYSTEMMODAL);
 		return false;
 	}
-	if (invalidfiles.size())
-	{
-		// 检查到无效文件时，仍执行，但弹窗警告。
-		std::wstringstream ss;
-		ss << L"部分文件可能已被篡改，是否仍要运行？";
-		ss << L"\n";
-		ss << L"Some files may have been altered. Do you still want to run it?";
-		if (0)
-		{
-			int idx = 1;
-			for (auto &f : invalidfiles)
-			{
-				// 前十个和最后一个显示名称，中间显示一个省略号
-				if (idx == invalidfiles.size() || idx < 10)
-				{
-					ss << L"\n";
-					ss << idx;
-					ss << L". ";
-					ss << f;
-				}
-				else if (idx == 10)
-				{
-					ss << L"\n";
-					ss << L"...";
-				}
-				else if (idx > 10)
-				{
-				}
-				idx++;
-			}
-		}
-		auto checked = MessageBoxW(0, ss.str().c_str(), L"Warning", MB_YESNO | MB_ICONQUESTION | MB_SYSTEMMODAL);
-		if (checked != IDYES)
-			return false;
-	}
+	// Local source and native-library changes are expected in this fork.
 	return true;
 }
 int main()

@@ -13,7 +13,9 @@ from pathlib import Path
 from install_grisaia_patches import digest, save_json
 
 REPO = Path(__file__).resolve().parents[1]
-BRIDGES = ("LunaTranslator.py", "translator/selfbuild.py", "textio/textsource/texthook.py")
+BRIDGES = ("LunaTranslator.py", "main.py", "myutils/config.py",
+           "myutils/updater.py", "gui/setting/about.py",
+           "translator/selfbuild.py", "textio/textsource/texthook.py")
 PYTHON_TLS_SHA256 = "8766a8775746235e23cf5aee5027ab1060bb981d93110577adcf3508aa0cbd55"
 PYTHON_TLS_URL = "https://www.python.org/ftp/python/3.13.13/python-3.13.13-embed-amd64.zip"
 
@@ -51,7 +53,7 @@ def install_tls(runtime, archive, manifest):
                               "archive_sha256": PYTHON_TLS_SHA256, "files": records}
 
 
-def deploy(home, game, python_embed=None, native_hook=None):
+def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None):
     if home.is_relative_to(REPO):
         raise ValueError("Runtime, configuration and journals must live outside Git.")
     runtime = home / "runtime" / "LunaTranslator_x64"
@@ -69,6 +71,19 @@ def deploy(home, game, python_embed=None, native_hook=None):
         if native_hook.is_relative_to(REPO) or not native_hook.is_file():
             raise ValueError("Keep the compiled native hook outside Git.")
         files.append((native_hook, runtime / "files/LunaHook/LunaHook32.dll"))
+    if launcher_dir:
+        launcher_dir = launcher_dir.resolve()
+        if launcher_dir.is_relative_to(REPO):
+            raise ValueError("Keep compiled launchers outside Git.")
+        for name in ("LunaTranslator.exe", "LunaTranslator_admin.exe"):
+            source = launcher_dir / name
+            data = source.read_bytes()
+            if len(data) < 64 or data[:2] != b"MZ":
+                raise ValueError("Expected a compiled Windows launcher.")
+            offset = int.from_bytes(data[60:64], "little")
+            if data[offset:offset + 6] != b"PE\0\0d\x86":
+                raise ValueError("Expected an x64 Windows launcher.")
+            files.append((source, runtime / name))
     manifest_path = home / "runtime-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"schema": 1, "files": {}}
     if python_embed:
@@ -101,7 +116,7 @@ def deploy(home, game, python_embed=None, native_hook=None):
     for translator in config["fanyi"].values():
         translator["use"] = False
     config["fanyi"]["selfbuild"].update(use=True, use_trans_cache=False, name_self_set="Grisaia · OpenAI")
-    config.update(srclang4="en", tgtlang4="ru", languageuse2="ru", autorun=True,
+    config.update(srclang4="en", tgtlang4="ru", languageuse2="en", autorun=True,
                   autoupdate=False, textthreaddelay=0, codepage_value=932,
                   maxBufferSize=65536, maxHistorySize=1000000)
     for name, settings in config["sourcestatus2"].items():
@@ -153,8 +168,10 @@ def main():
                         help="Official matching Python archive supplying missing TLS extensions")
     parser.add_argument("--native-hook", type=Path,
                         help="Private matching 32-bit LunaHook DLL; close Luna and the game first")
+    parser.add_argument("--launcher-dir", type=Path,
+                        help="Private x64 local launcher build directory")
     args = parser.parse_args()
-    deploy(args.home.resolve(), args.game_dir.resolve(), args.python_embed, args.native_hook)
+    deploy(args.home.resolve(), args.game_dir.resolve(), args.python_embed, args.native_hook, args.launcher_dir)
 
 
 if __name__ == "__main__":

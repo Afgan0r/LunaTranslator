@@ -116,9 +116,10 @@ def checklang():
     import windows
 
     if "languageuse2" in globalconfig:
+        globalconfig["languageuse2"] = "en"
         return
     lang = GetUILanguage(windows.GetLocale())
-    globalconfig["languageuse2"] = lang.code
+    globalconfig["languageuse2"] = "en"
     globalconfig["tgtlang4"] = lang.code
     if lang == Languages.Chinese:
         globalconfig["fanyi"]["youdaodict"]["use"] = True

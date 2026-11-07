@@ -28,26 +28,7 @@ from gui.fluent.card import make_trailing_combo, make_card_contents
 from gui.fluent.expander import ExExpander
 from gui.fluent import repolish_style
 from gui.setting.display_ui import switch_darklight
-from language import UILanguages, Languages
-from myutils.updater import versionchecktask
-
-
-def createversionlabel():
-
-    versionlabel = LinkLabel()
-    versionlabel.setOpenExternalLinks(False)
-    versionlabel.linkActivated.connect(lambda _: os.startfile(dynamiclink("ChangeLog")))
-
-    gobject.base.connectsignal(
-        gobject.base.versiontextsignal,
-        functools.partial(versionlabelmaybesettext, versionlabel),
-    )
-    return versionlabel
-
-
-def versionlabelmaybesettext(versionlabel: QLabel, x):
-    x = '<a href="fuck">{}</a>'.format(x)
-    versionlabel.setText(x)
+from language import Languages
 
 
 def delayloadlinks(key):
@@ -112,50 +93,6 @@ def changeUIlanguage(_):
         gobject.base.textsource.setlang()
     except:
         pass
-
-
-def updatexx(self):
-    return getboxlayout(
-        [
-            D_getsimpleswitch(
-                globalconfig,
-                "autoupdate",
-                callback=lambda _: (
-                    versionchecktask.put(_),
-                    (
-                        self.aboutlayout.layout().setRowVisible(2, False)
-                        if not _
-                        else ""
-                    ),
-                ),
-                default=True,
-            ),
-            getsmalllabel(""),
-            getsmalllabel("最新版本"),
-            createversionlabel,
-            "",
-        ]
-    )
-
-
-def progress___(self):
-
-    downloadprogress = QProgressBar(self)
-    downloadprogress.setRange(0, 10000)
-    downloadprogress.setAlignment(
-        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-    )
-    self.downloadprogress = downloadprogress
-    return downloadprogress
-
-
-def _progresssignal4(
-    updatelayout: VisLFormLayout, downloadprogress: QProgressBar, text, val
-):
-    downloadprogress.setValue(val)
-    downloadprogress.setFormat(text)
-    if (val or text) and globalconfig.get("autoupdate", True):
-        updatelayout.setRowVisible(2, True)
 
 
 class MDLabel(LinkLabel):
@@ -445,37 +382,10 @@ def makelink(repo):
     ]
 
 
-class __delayloadlangs(QHBoxLayout):
-    def __init__(self):
-        super().__init__()
-        self.como = SuperCombo(static=True)
-        self.como.addItem(Languages.fromcode(globalconfig["languageuse2"]).nativename)
-        # Qt6的脑残fontmerging机制导致变得很慢。
-        QTimer.singleShot(0, self.delayload)
-        self.addWidget(self.como)
-
-    def delayload(self):
-        self.como.clear()
-        inner, vis = [_.code for _ in UILanguages], [_.nativename for _ in UILanguages]
-        self.como.addItems(vis, inner)
-        self.como.setCurrentData(globalconfig["languageuse2"])
-        self.como.currentIndexChanged.connect(
-            lambda _: (
-                globalconfig.__setitem__("languageuse2", self.como.getCurrentData()),
-                changeUIlanguage(0),
-            )
-        )
-
-
 def setTab_about(self: QWidget, basel):
     _uis = ui_settings
 
     # 与其他设置页同一条代码路径（makescrollgrid）——不手搓容器
-
-    # 界面语言（不能抽出 combo 重挂——延迟加载会丢 item，必须用 widget 包裹布局）
-    lang_holder = QWidget()
-    lang_holder.setLayout(__delayloadlangs())
-    lang_holder.layout().setContentsMargins(0, 0, 0, 0)
 
     # 应用主题
     darklight_combo = getsimplecombobox(
@@ -486,44 +396,6 @@ def setTab_about(self: QWidget, basel):
         ),
         default=0,
     )
-
-    # 自动更新
-    update_switch = D_getsimpleswitch(
-        globalconfig, "autoupdate",
-        callback=lambda _: versionchecktask.put(_),
-        default=True,
-    )()
-    self.downloadprogress = QProgressBar(self)
-    self.downloadprogress.setRange(0, 10000)
-    self.downloadprogress.setAlignment(
-        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-    )
-    self.downloadprogress.setVisible(False)
-    version_link = createversionlabel()
-
-    # 自动更新进度回调
-    gobject.base.connectsignal(
-        gobject.base.progresssignal4,
-        lambda text, val: _progresssignal4_card(
-            self.downloadprogress, text, val),
-    )
-
-    # 自动更新折叠卡（子项 = 最新版本）
-
-    updateexp = ExExpander()
-    updateheader = QWidget()
-    uhlay = QHBoxLayout(updateheader)
-    uhlay.setContentsMargins(0, 12, 0, 12)
-    uhlay.setSpacing(8)
-    utitlelabel = LLabel("自动更新")
-    utitlefont = utitlelabel.font()
-    utitlefont.setPixelSize(15)
-    utitlelabel.setFont(utitlefont)
-    uhlay.addWidget(utitlelabel)
-    uhlay.addStretch(1)
-    uhlay.addWidget(update_switch)
-    updateexp.setHeaderWidget(updateheader)
-    updateexp.addContentWidget(getboxwidget(["最新版本", 1, version_link]))
 
     # LICENSE 折叠（ExExpander，同 Gallery 强调色折叠面板的用法）
 
@@ -588,19 +460,8 @@ def setTab_about(self: QWidget, basel):
 
     # 与其他设置页完全相同的排版路径（makescrollgrid）
     grid = [
-        [(makecardrow("界面语言", lang_holder), 0)],
         [(makecardrow("应用主题", make_trailing_combo(darklight_combo)), 0)],
-        [(updateexp, 0)],
-        # 下载进度条：显示时出现在卡片下方（隐藏时布局不占位）
-        [(self.downloadprogress, 0)],
         [(license_expander, 0)],
         [(aboutwidget(), 0)],
     ]
     makescrollgrid(grid, basel)
-
-
-def _progresssignal4_card(progressbar: QProgressBar, text, val):
-    progressbar.setValue(val)
-    progressbar.setFormat(text)
-    progressbar.setVisible(bool(val or text))
-

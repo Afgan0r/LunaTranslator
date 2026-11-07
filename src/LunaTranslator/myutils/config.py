@@ -458,7 +458,7 @@ languageshow = {}
 
 
 def getlanguse() -> Languages:
-    return Languages.fromcode(globalconfig["languageuse2"])
+    return Languages.English
 
 
 def langfile(lang) -> str:

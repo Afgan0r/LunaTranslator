@@ -9,8 +9,11 @@ stay outside Git.
 
 The original repository history is preserved. `upstream` points to
 [HIllya51/LunaTranslator](https://github.com/HIllya51/LunaTranslator).
-The integration branch is `grisaia-openai`; no personal publishing remote is
-configured.
+The personal branch is `master`; the earlier `grisaia-openai` branch remains
+in local history. `origin` points to
+[Afgan0r/LunaTranslator](https://github.com/Afgan0r/LunaTranslator).
+Upstream merges and local runtime updates require a separate explicit request.
+Binary releases are not part of this personal workflow.
 
 The supplied x64 ZIP matches source revision
 `2f65c65eb2f6ea6584a4210a982f64412df071cd`, version `12.0.0.1`:
@@ -22,13 +25,46 @@ Integrate updates through a merge, after checking for local changes:
 
 ```sh
 git fetch --prune upstream
-git switch grisaia-openai
+git switch master
 git merge upstream/main
 python -X utf8 -m unittest discover -s tests/grisaia -v
 ```
 
 Match a new runtime ZIP to its source before deployment. Recheck the three
 bridge sites and native hook after updates; the custom engine remains separate.
+
+## Local fork behavior
+
+The interface is fixed to English. Translation languages remain independent,
+and other localization assets remain in the source tree. Existing interface
+settings are migrated to English at startup without changing source or target
+translation languages. Grisaia deployment also selects English UI.
+
+The original binary updater is disabled at startup and shutdown, including
+installation of previously cached upstream packages. The language selector
+and update controls are removed from About; theme controls remain available.
+Updates consist of an explicitly requested source merge, checks, native build
+where needed, and manifest-managed deployment to the existing private runtime.
+
+The local launcher permits modified files without a confirmation dialog.
+It retains startup failures for missing required Python files, a missing
+interpreter, and an invalid signature on a signed launcher. Generate the
+required-file header from the current source before building; keep the header,
+native output, compiler/dependency identities and build logs outside Git.
+
+<!-- markdownlint-disable MD013 -->
+```text
+python -X utf8 src/scripts/createsigexe.py header <private-build>/checksigs.hpp
+cmake -S src/NativeImpl -B <private-build>/launcher -G "Visual Studio 17 2022" -A x64 -DBUILD_EXEC_ONLY=ON -DWIN10ABOVE=ON -DLUNA_OUTPUT_DIRECTORY=<private-build>/bin -DLUNA_CHECKSIGS_HEADER=<private-build>/checksigs.hpp
+cmake --build <private-build>/launcher --config Release --target LunaTranslator LunaTranslator_admin
+python -X utf8 tools/deploy_grisaia.py --home <private-home> --game-dir <installed-game> --launcher-dir <private-build>/bin
+```
+<!-- markdownlint-enable MD013 -->
+
+Use matching MSVC and x64 ATL headers/libraries when configuring the launcher.
+Deployment validates both supplied EXEs as x64 PE files and retains originals
+and installed hashes in the existing runtime manifest. A source edit or a
+successful build alone is not proof of runtime deployment or live capture.
 
 ## External installation
 
