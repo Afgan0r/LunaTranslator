@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+test -z "$(git status --porcelain)" || { echo "Commit or remove working-tree changes before pushing." >&2; exit 1; }
+git diff --check
+git show --format= --check HEAD
+markdownlint-cli2 AGENTS.md 'docs/engineering/*.md' '.agents/skills/*/SKILL.md'
+python -X utf8 -m unittest discover -s tests/grisaia -p 'test_*.py'

@@ -1,0 +1,4 @@
+interface:
+  display_name: "LunaTranslator Conventions"
+  short_description: "Implement LunaTranslator changes safely"
+  default_prompt: "Use $lunatranslator-conventions to implement this project change."

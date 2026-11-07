@@ -1,0 +1,4 @@
+interface:
+  display_name: "LunaTranslator Integrations"
+  short_description: "Verify LunaTranslator integration boundaries"
+  default_prompt: "Use $lunatranslator-integrations to verify this integration."

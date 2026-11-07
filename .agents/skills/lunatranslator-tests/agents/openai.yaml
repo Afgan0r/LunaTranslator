@@ -1,0 +1,4 @@
+interface:
+  display_name: "LunaTranslator Tests"
+  short_description: "Verify LunaTranslator behavior and recovery"
+  default_prompt: "Use $lunatranslator-tests to verify this project change."

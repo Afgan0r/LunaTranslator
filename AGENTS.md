@@ -22,6 +22,30 @@ translation history, local deployment, or recovery, also read
 `docs/grisaia-openai.md`. Recheck current sources and runtime evidence before
 using historical results as proof of present behavior.
 
+## Engineering skills
+
+For implementation, tests, review, or integration work, read
+[the engineering contract](docs/engineering/contract.md) and
+[verification status](docs/engineering/verification.md), then the applicable
+skill entrypoints below. Follow their required and conditional reads.
+
+<!-- markdownlint-disable MD013 -->
+
+| Task | Required skill |
+| --- | --- |
+| Implement, refactor, or diagnose project code | [lunatranslator-conventions](.agents/skills/lunatranslator-conventions/SKILL.md) |
+| Write/review tests or verify behavior | [lunatranslator-tests](.agents/skills/lunatranslator-tests/SKILL.md) |
+| Review changes or complete substantive work | [lunatranslator-review](.agents/skills/lunatranslator-review/SKILL.md) |
+| Change hooks, native/Qt/runtime boundaries, launcher, deployment or recovery | [lunatranslator-integrations](.agents/skills/lunatranslator-integrations/SKILL.md) |
+
+<!-- markdownlint-enable MD013 -->
+
+For these four skills, agents may autonomously correct verified factual errors
+and clarify already accepted requirements. New obligations, prohibitions,
+exceptions, architecture restrictions, and acceptance changes require owner
+approval. Skill maintenance grants no additional authority over application
+code, memory contracts, live systems or publication.
+
 ## Source and runtime boundaries
 
 - Python application code is in `src/LunaTranslator`; native launchers and
@@ -58,6 +82,18 @@ Use English Conventional Commits. Do not publish binary releases or change
 the default branch without an explicit request.
 
 ## Implementation and verification
+
+Use a repository-local pre-push hook as the mandatory quality gate instead of
+requiring CI. The hook and agents must run the same existing verification
+commands; a failed required check blocks the push. Run the applicable checks
+before declaring a task complete, and do not bypass the hook to publish a
+failing result. This local workflow does not require a CI or CD pipeline;
+inherited publication workflows do not grant release authority.
+
+Do not run skill or memory evaluations in this repository. Structural checks,
+Markdown/link validation, ordinary application tests, and substantive review
+remain applicable. This restriction does not change normal project-memory
+recall, capture, or verification under `docs/agent-memory.md`.
 
 Reuse neighboring Python, Qt, and C++ patterns. Keep changes narrow, with clear
 failure handling and one source of truth for derived deployment artifacts.

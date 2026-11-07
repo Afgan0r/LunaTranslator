@@ -1,0 +1,4 @@
+interface:
+  display_name: "LunaTranslator Review"
+  short_description: "Review LunaTranslator changes and history"
+  default_prompt: "Use $lunatranslator-review to review this project change."
