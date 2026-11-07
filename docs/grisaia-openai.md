@@ -407,6 +407,15 @@ model's input limit and pause; neither the reference nor journal is silently pru
 Events summarization can still lose detail; originals and translations remain
 unchanged in SQLite for inspection and recovery.
 
+Only context compaction requests select `service_tier: "fast"`; ordinary
+translations continue to request `default`. Sol 6.1 Fast token prices are twice
+Standard ([model pricing](https://developers.openai.com/api/docs/models/gpt-6.1-sol),
+[Fast mode](https://developers.openai.com/api/docs/guides/fast-mode), accessed
+2026-11-07). Metadata records requested and actual tiers separately. Cost estimates
+use the returned tier. When Fast is requested but the actual tier is missing,
+the estimate uses the requested rate and is marked provisional. A synthetic API
+check returned actual `fast`; 61 regression tests and independent reviews passed.
+
 Contexts are append-only journal checkpoints, committed before the next
 translation. A
 restart or failed translation reuses a committed checkpoint. A failed or interrupted

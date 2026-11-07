@@ -117,8 +117,8 @@ def usage_counters(response):
             "reasoning_tokens": count(outputs.get("reasoning_tokens"))}
 
 
-def estimate_cost(model, usage):
-    """Standard USD estimate, never an invoice or assumption of free credit.
+def estimate_cost(model, usage, service_tier="default"):
+    """Tier-aware USD estimate, never an invoice or assumption of free credit.
 
     Cache writes replace the normal input charge for those tokens. Missing
     counters remain explicit; their absence makes the estimate provisional.
@@ -137,9 +137,13 @@ def estimate_cost(model, usage):
     long_context = incoming > 272000
     if long_context:
         ir, cr, wr, out = ir * 2, cr * 2, wr * 2, out * 1.5
-    return {"usd": (normal * ir + cached * cr + written * wr + output * out) / 1e6,
+    multiplier = 2 if service_tier in ("fast", "priority") else 1
+    if service_tier not in ("default", "fast", "priority"):
+        missing.append("service_tier")
+    return {"usd": multiplier * (normal * ir + cached * cr + written * wr + output * out) / 1e6,
             "provisional": bool(missing), "missing_counters": missing,
-            "long_context": long_context, "basis": "standard_price_estimate_not_invoice"}
+            "long_context": long_context, "service_tier": service_tier,
+            "basis": "fast_price_estimate_not_invoice" if multiplier == 2 else "standard_price_estimate_not_invoice"}
 
 
 class ResponsesClient:
@@ -244,6 +248,7 @@ class ResponsesClient:
                 payload = build_payload(messages, config, cache_key)
                 if json_output:
                     payload["text"] = {"format": CONTEXT_FORMAT}
+                    payload["service_tier"] = "fast"
                 body = json.dumps(payload, ensure_ascii=False,
                                   separators=(",", ":")).encode("utf-8")
                 status, data = self._request("api.openai.com", "POST", "/v1/responses", body,
@@ -255,7 +260,8 @@ class ResponsesClient:
                     if code in ("context_length_exceeded", "context_window_exceeded"):
                         raise TranslationError("context_overflow")
                     raise TranslationError("request_failed")
-                return parse_response(data, config.model, time.monotonic() - started)
+                return parse_response(data, config.model, time.monotonic() - started,
+                                      requested_service_tier=payload["service_tier"])
             except TranslationError:
                 raise
             except Exception:
@@ -264,7 +270,7 @@ class ResponsesClient:
                 raise TranslationError("request_failed") from None
 
 
-def parse_response(data, pricing_model, latency_seconds):
+def parse_response(data, pricing_model, latency_seconds, requested_service_tier="default"):
     if data.get("status") != "completed":
         raise TranslationError("incomplete")
     texts = []
@@ -297,9 +303,14 @@ def parse_response(data, pricing_model, latency_seconds):
         if isinstance(value, str) and 0 < len(value) <= 160 and all(c.isascii() and (c.isalnum() or c in "-_.") for c in value):
             return value
         return None
+    tier = safe_identifier(data.get("service_tier"))
+    cost = estimate_cost(pricing_model, counters, tier or requested_service_tier)
+    if tier is None and requested_service_tier != "default":
+        cost["provisional"] = True
+        cost["missing_counters"].append("service_tier")
     metadata = {"usage": counters, "latency_seconds": latency_seconds,
                 "response_id": safe_identifier(data.get("id")),
                 "model": safe_identifier(data.get("model")),
-                "service_tier": safe_identifier(data.get("service_tier")),
-                "cost_estimate": estimate_cost(pricing_model, counters)}
+                "service_tier": tier, "requested_service_tier": requested_service_tier,
+                "cost_estimate": cost}
     return TranslationResult(text, metadata)

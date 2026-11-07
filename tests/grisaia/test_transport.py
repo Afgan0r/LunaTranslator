@@ -83,6 +83,8 @@ class TransportTests(unittest.TestCase):
         normal = json.loads(client.calls[2][3])
         self.assertEqual(compact["model"], "gpt-6.1-sol")
         self.assertEqual(compact["reasoning"], {"effort": "high"})
+        self.assertEqual(compact["service_tier"], "fast")
+        self.assertEqual(normal["service_tier"], "default")
         self.assertEqual(compact["prompt_cache_key"], "key-context-v2")
         self.assertEqual(compact["text"]["format"]["type"], "json_schema")
         self.assertTrue(compact["text"]["format"]["strict"])
@@ -94,6 +96,18 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(normal["model"], self.config.model)
         self.assertEqual(normal["reasoning"], {"effort": "low"})
         self.assertEqual(client.compact_every, 100)
+
+    def test_fast_cost_uses_actual_response_tier_and_marks_missing_tier(self):
+        for tier, multiplier in (("fast", 2), ("priority", 2), ("default", 1), (None, 2)):
+            with self.subTest(tier=tier):
+                response = completed()
+                response["service_tier"] = tier
+                result = parse_response(response, "gpt-6.1-sol", 1, requested_service_tier="fast")
+                cost = result.metadata["cost_estimate"]
+                baseline = estimate_cost("gpt-6.1-sol", usage_counters(response))
+                self.assertAlmostEqual(cost["usd"], multiplier * baseline["usd"])
+                self.assertEqual(cost["provisional"], tier is None)
+                self.assertEqual(result.metadata["requested_service_tier"], "fast")
 
     def test_sol_low_translation_payload_and_cost(self):
         config = dataclasses.replace(self.config, model="gpt-6.1-sol", reasoning_effort="low")
