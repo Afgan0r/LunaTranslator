@@ -59,6 +59,7 @@ NAV_ICONS = {
 
 # fluentui3styleproperties.h —— enum TabBarStyle
 TABBAR_STYLE_PIVOT_GROW = 3  # Pivot_Grow
+TABBAR_STYLE_SEGMENTED_SLIDE = 6  # Segmented_Slide
 
 # 直角面板（FluentSquarePane）配色
 PANE_COLORS_PAGE = 0  # 同页卡（FluentPageCard 配方）
@@ -191,6 +192,15 @@ def apply_pivot_bar_style(bar: QTabBar):
     bar.setExpanding(False)
 
 
+def apply_segmented_slide_bar_style(bar: QTabBar):
+    """裸 QTabBar 的 Segmented_Slide 配置：分段容器底（带
+    WA_StyledBackground 时插件画容器）+ 选中段实心拇指滑动过渡。"""
+    bar.setProperty("tabBarStyle", TABBAR_STYLE_SEGMENTED_SLIDE)
+    bar.setAttribute(Qt.WA_StyledBackground, True)
+    bar.setDrawBase(False)
+    bar.setExpanding(False)
+
+
 class FluentPaneTabWidget(LTabWidget):
     """Gallery 式页签组（pageaudiolevelmeter.cpp 基础/刻度/动画/颜色
     tab 同款）：tabbar 样式可参数化（tabbar_style，默认 Pivot_Grow——
@@ -311,7 +321,7 @@ class FluentTabWidget(QWidget):
         footer_lay = QVBoxLayout(footer_container)
         footer_lay.setContentsMargins(6, 0, 6, 6)
         footer_lay.setSpacing(0)
-        self.nav_footer = FluentNavTree(footer_container)
+        self.nav_footer = FluentNavTree(footer_container, footer=True)
         self.nav_footer.setFixedHeight(38)
         footer_lay.addWidget(self.nav_footer)
 

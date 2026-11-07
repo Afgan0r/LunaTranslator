@@ -15,12 +15,12 @@ import NativeUtils
 import gobject
 from NativeUtils import WebView2
 import re
-from myutils.hwnd import getExeIcon, getcurrexe
+from myutils.hwnd import getExeIcon
 from gui.qevent import DarkLightChangedEvent, DarkLightSettingChangedEvent
 from myutils.config import _TR, globalconfig, mayberelpath, dynamiclink, ui_settings
 from myutils.wrapper import Singleton, threader, tryprint
 from myutils.utils import nowisdark
-from myutils.hwnd import getcurrexe
+from NativeUtils import getcurrexe
 from ocrengines.baseocrclass import OCRResult
 from NativeUtils import MenuItem
 from gui.RichMessageBox import RichMessageBox
@@ -618,6 +618,38 @@ class TableViewW(DelayLoadTableView, LTableView):
             return ""
         return self.getindexdata(index)
 
+    @staticmethod
+    def celltext(data) -> str:
+        """单元格 → 文本：非 str（开关的 bool、语音指定 target 的列表
+        等）落成 JSON 文本，粘贴/导入侧 compatiblebool/compatiblejson
+        解析回。"""
+        if isinstance(data, str):
+            return data
+        return json.dumps(data, ensure_ascii=False)
+
+    def rowstotext(self, _data) -> str:
+        """行数据 → TSV 文本（复制粘贴的剪贴板格式，parsepastetext 的
+        逆操作）。"""
+        output = io.StringIO()
+        csv_writer = csv.writer(output, delimiter="\t")
+        for row in _data:
+            csv_writer.writerow(row)
+        csv_str = output.getvalue()
+        output.close()
+        return csv_str
+
+    def gettabletext(self) -> str:
+        """整表 → TSV 文本（copytable 同款格式，不碰剪贴板）：文件导出
+        与复制共用同一格式，导出的文件可以直接粘贴回来。"""
+        _data = []
+        for row in range(self.model().rowCount()):
+            _data.append([])
+            for col in range(self.model().columnCount()):
+                _data[-1].append(
+                    self.celltext(self.getdata(self.model().index(row, col)))
+                )
+        return self.rowstotext(_data)
+
     def copytable(self) -> str:
         _data = []
         lastrow = -1
@@ -625,18 +657,8 @@ class TableViewW(DelayLoadTableView, LTableView):
             if index.row() != lastrow:
                 _data.append([])
                 lastrow = index.row()
-            data = self.getdata(index)
-            if not isinstance(data, str):
-                data = json.dumps(data, ensure_ascii=False)
-            _data[-1].append(data)
-        output = io.StringIO()
-
-        csv_writer = csv.writer(output, delimiter="\t")
-        for row in _data:
-            csv_writer.writerow(row)
-        csv_str = output.getvalue()
-        output.close()
-        NativeUtils.ClipBoard.text = csv_str
+            _data[-1].append(self.celltext(self.getdata(index)))
+        NativeUtils.ClipBoard.text = self.rowstotext(_data)
 
     def parsepastetext(self, string) -> list:
         csv_file = io.StringIO(string)
@@ -644,6 +666,25 @@ class TableViewW(DelayLoadTableView, LTableView):
         my_list = list(csv_reader)
         csv_file.close()
         return my_list
+
+    def inserttablelines(self, my_list, row, col=0):
+        """在 row 行起整块插入 TSV 解析出的行（pastetable 的写入部分，
+        文件导入复用）：每行从 col 列起对齐填入（越出表宽则从头对齐），
+        缺的格子补空，逐格 setindexdata（走各对话框的控件构建路径，
+        与粘贴进来的行完全同构）。"""
+        self.model().insertRows(row, len(my_list))
+        for j, line in enumerate(my_list):
+            if len(line) + col > self.model().columnCount():
+                startj = 0
+            else:
+                startj = col
+            for i in range(0, self.model().columnCount()):
+                data = (
+                    line[i - startj]
+                    if (i - startj < len(line) and i >= startj)
+                    else ""
+                )
+                self.setindexdata(self.model().index(row + j, i), data)
 
     def pastetable(self):
         current = self.currentIndex()
@@ -656,21 +697,7 @@ class TableViewW(DelayLoadTableView, LTableView):
             if len(my_list) == 1 and len(my_list[0]) == 1:
                 self.setindexdata(current, my_list[0][0])
                 return
-            self.model().insertRows(current.row() + 1, len(my_list))
-            for j, line in enumerate(my_list):
-                if len(line) + current.column() > self.model().columnCount():
-                    startj = 0
-                else:
-                    startj = current.column()
-                for i in range(0, self.model().columnCount()):
-                    data = (
-                        line[i - startj]
-                        if (i - startj < len(line) and i >= startj)
-                        else ""
-                    )
-                    self.setindexdata(
-                        self.model().index(current.row() + 1 + j, i), data
-                    )
+            self.inserttablelines(my_list, current.row() + 1, current.column())
         except:
             print_exc()
             self.setindexdata(current, string)
@@ -1156,12 +1183,14 @@ def getIconButton(
     tips=None,
     color=None,
     checkablechangecolor=True,
+    parent=None,
 ):
 
     b = IconButton(
         icon,
         enable,
         qicon,
+        parent,
         fix=fix,
         tips=tips,
         color=color,
@@ -1555,6 +1584,28 @@ class SingleExtensionSetting_(saveposwindow):
         self.tabw.midclicked.connect(self.close_tab)
         self.setCentralWidget(self.tabw)
         self.destroyed.connect(SingleExtensionSetting_.ondestroyed)
+        self._wine_webview_repaint = NativeUtils.IsRunningOnWine()
+
+    def event(self, event):
+        result = super().event(event)
+        if event.type() == QEvent.Type.UpdateRequest and getattr(
+            self, "_wine_webview_repaint", False
+        ):
+            page = self.tabw.currentWidget()
+            if page is not None and page.isVisible():
+                # Wine loses the native child surface after Qt's backing-store
+                # flush (including activation changes). Repaint the whole host,
+                # not just Chrome's HWNDs, after Qt has finished painting.
+                windows.RedrawWindow(
+                    int(page.winId()),
+                    None,
+                    None,
+                    windows.RDW_INVALIDATE
+                    | windows.RDW_NOERASE
+                    | windows.RDW_ALLCHILDREN
+                    | windows.RDW_UPDATENOW,
+                )
+        return result
 
     @staticmethod
     def ondestroyed():
@@ -2659,9 +2710,11 @@ def makescroll():
     return scroll
 
 
-def makescrollgrid(grid, lay: QLayout, savelist=None, savelay=None, hiderows=None):
+def makescrollgrid(grid, lay: QLayout, savelist=None, savelay=None, hiderows=None,
+                   topmargin=None):
     # 子页签页（tabadd_lazy 标记）的网格顶部紧贴 tabbar；
-    # 卡内网格（pagecard / 主页卡）顶边距统一为 16（与左边距一致）
+    # 卡内网格（pagecard / 主页卡）顶边距统一为 16（与左边距一致）；
+    # topmargin 显式指定时覆盖默认
     flush = bool(getattr(lay, "property", lambda *_: None)("_fluent_tabbar_page"))
     incard = bool(getattr(lay, "property", lambda *_: None)("_fluent_card_grid"))
     mainpg = bool(getattr(lay, "property", lambda *_: None)("_fluent_main_grid"))
@@ -2672,7 +2725,8 @@ def makescrollgrid(grid, lay: QLayout, savelist=None, savelay=None, hiderows=Non
         delay=True,
         hiderows=hiderows,
         toptouch=flush,
-        topmargin=16 if (incard or mainpg) else None,
+        topmargin=topmargin if topmargin is not None
+        else (16 if (incard or mainpg) else None),
     )
     swid = makescroll()
     lay.addWidget(swid)

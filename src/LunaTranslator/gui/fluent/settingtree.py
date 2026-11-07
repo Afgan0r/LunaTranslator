@@ -14,12 +14,14 @@
 from qtsymbols import (
     QAbstractItemView,
     QApplication,
+    QBrush,
     QDrag,
     QFrame,
     QHBoxLayout,
     QMimeData,
     QSizePolicy,
     Qt,
+    QTimer,
     QTreeWidget,
     QVBoxLayout,
     QWidget,
@@ -31,6 +33,9 @@ from myutils.config import _TR
 
 # 自管拖拽的 mime 标记（同视图内重排，无携带数据）
 _RANKMOVE_MIME = "lunarankmove"
+# 行名无障碍文本的原文（_a11yname 存原文，updatelangtext 重翻译；
+# UserRole 被各树存 post 键占用）
+_A11Y_NAME_ROLE = Qt.ItemDataRole.UserRole + 10
 
 
 class FluentSettingTree(QTreeWidget):
@@ -64,13 +69,41 @@ class FluentSettingTree(QTreeWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding,
                            QSizePolicy.Policy.Expanding)
 
+    def showEvent(self, e):
+        super().showEvent(e)
+        # 页面显示时把焦点交给树（延迟一拍，等整页/整窗显示完成）：
+        # NVDA 只在收到焦点事件后才会构建 item view 的可访问子树
+        # （#2614 用户实测——跟表格里的开关交互一次刷新后，小键盘导航
+        # 才能读出行内容；离开页面再进来又失效），进入页面时主动触发
+        # 一次，读屏/键盘用户也能顺势直接用方向键走列表。
+        QTimer.singleShot(
+            0, functools.partial(self.setFocus, Qt.FocusReason.TabFocusReason)
+        )
+
     def updatelangtext(self):
-        # 语言切换：列标题重翻译（app 级事件过滤器驱动，同 LLabel）
+        # 语言切换：列标题 + 行名（无障碍文本）重翻译
+        # （app 级事件过滤器驱动，同 LLabel）
         if self._titles is not None:
             for i, t in enumerate(self._titles):
                 self.headerItem().setText(i, _TR(t))
+        for i in range(self.topLevelItemCount()):
+            item = self.topLevelItem(i)
+            for c in range(self.columnCount()):
+                raw = item.data(c, _A11Y_NAME_ROLE)
+                if raw is not None:
+                    item.setText(c, _TR(raw))
 
     # ---- 行构建助手 ----
+    def _a11yname(self, item, column, text):
+        """行名的无障碍文本（NVDA 读屏）：item view 只把 item 文本暴露
+        给读屏（setItemWidget 的控件不在可访问树里），名称列已有 LLabel
+        显示，这里把同一文本写进 item、前景画成透明——视觉不变，读屏
+        的表格/对象导航能读出行名。text 传原文，随语言切换重翻译
+        （updatelangtext，同列标题）。"""
+        item.setData(column, _A11Y_NAME_ROLE, text)
+        item.setText(column, _TR(text))
+        item.setForeground(column, QBrush(Qt.GlobalColor.transparent))
+
     def _cell(self, *ws, center=False):
         """行内格子：水平排布若干控件；center 时两侧 stretch 居中。"""
         w = QWidget()
@@ -110,6 +143,30 @@ class FluentSettingTree(QTreeWidget):
             ),
             center=True,
         )
+
+    # ---- 排序（拖拽 / 上下移按钮共用）----
+    # 子类实现 _rank_list（可见键序列）与 _rank_applymove（数据序
+    # 调整 + 重建行）；_ondrop/_move 由本基类统一提供
+    def _rank_list(self):
+        raise NotImplementedError
+
+    def _rank_applymove(self, idx1, idx2):
+        raise NotImplementedError
+
+    def _ondrop(self, idx1, idx2):
+        self._rank_applymove(idx1, idx2)
+
+    def _move(self, k, up, tomax):
+        """循环移一位（首行再上移到末尾、末行再下移到开头），
+        右键（tomax）置顶/置底。"""
+        lst = self._rank_list()
+        idx1 = lst.index(k)
+        if tomax:
+            idx2 = 0 if up else len(lst) - 1
+        else:
+            idx2 = (idx1 + (-1 if up else 1)) % len(lst)
+        if idx2 != idx1:
+            self._rank_applymove(idx1, idx2)
 
     # ---- 自管拖拽（子类实现 _ondrop：改写数据序 + 重建行）----
     def mousePressEvent(self, ev):

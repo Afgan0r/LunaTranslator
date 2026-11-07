@@ -111,6 +111,13 @@ namespace
         strReplace(s, "#r");
         buffer->from(s);
     }
+    void SLPM65370(TextBuffer *buffer, HookParam *hp)
+    {
+        auto s = buffer->strA();
+        s = re::sub(s, R"((\x81\x40)*\n(\x81\x40)*)");
+        s = re::sub(s, R"(^(\x81\x40)*)");
+        buffer->from(s);
+    }
     void FSLPM65914(TextBuffer *buffer, HookParam *hp)
     {
         auto s = buffer->strAW();
@@ -658,6 +665,13 @@ namespace
     void FSLPM55216(TextBuffer *buffer, HookParam *hp)
     {
         if ((WORD)PCSX2_REG(a2) != 0)
+            return buffer->clear();
+        FSLPM65997X(buffer, hp);
+        all_ascii_Filter(buffer, hp);
+    }
+    void FSLPM66687(TextBuffer *buffer, HookParam *hp)
+    {
+        if ((WORD)PCSX2_REG(t2) != 0)
             return buffer->clear();
         FSLPM65997X(buffer, hp);
         all_ascii_Filter(buffer, hp);
@@ -2430,7 +2444,7 @@ namespace
     template <int which, bool usesplit = false>
     void SLPM65988char(hook_context *, HookParam *hp, TextBuffer *buffer, uintptr_t *split)
     {
-        static const wchar_t *whichx[] = {L"Yoshitsune", L"Futakoi_Alternative", L"Shounen_Onmyouji", L"Darling"};
+        static const wchar_t *whichx[] = {L"Yoshitsune", L"Futakoi_Alternative", L"Shounen_Onmyouji", L"Darling", L"Bakumatsu"};
         static auto charset = load_charset_with_common(whichx[which]);
         auto code = (uint16_t)(PCSX2_REG_EMU(a0) & 0xffff);
         buffer->from_t(charset[code]);
@@ -2712,6 +2726,31 @@ namespace
             buffer->from_t(ch);
         }
     }
+    void SLPM55223(TextBuffer *buffer, HookParam *hp)
+    {
+        if ((WORD)PCSX2_REG(a2) != 0xffff)
+            return buffer->clear();
+        NewLineCharFilterA(buffer, hp);
+    }
+    void SLPM66841(TextBuffer *buffer, HookParam *hp)
+    {
+        if ((DWORD)PCSX2_REG(t2) != 0)
+            return buffer->clear();
+        FSLPM65997(buffer, hp);
+        all_ascii_Filter(buffer, hp);
+    }
+    void SLPM65737add(hook_context *, HookParam *, TextBuffer *buffer, uintptr_t *)
+    {
+        buffer->from(jisx0208_to_shiftjis((const char *)PCSX2_REG(a0)));
+    }
+    void SLPM66028(TextBuffer *buffer, HookParam *hp)
+    {
+        static lru_cache<std::string> cache(5);
+        std::string s = buffer->strA();
+        if (cache.touch(s))
+            return buffer->clear();
+        buffer->from(s);
+    }
 }
 struct emfuncinfoX
 {
@@ -2719,6 +2758,28 @@ struct emfuncinfoX
     emfuncinfo info;
 };
 static const emfuncinfoX emfunctionhooks_1[] = {
+    // ナデプロ！！ ～キサマも声優やってみろ！～
+    {0x1897B8, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, SLPM55223, "SLPM-55223"}},
+    // 召しませ浪漫茶房
+    {0x19fd30, {0, 0, 0, SLPM65737add, 0, "SLPM-65737"}}, // EvMsgWin_AddStr a0=JIS串
+    {0x1a0010, {0, 0, 0, SLPM65737add, 0, "SLPM-65737"}}, // EvMsgWin_SetNameStr a0=名
+    {0x1a1590, {0, 0, 0, SLPM65737add, 0, "SLPM-65737"}}, // EvSelector_AddItem a0=项文本
+    // うるるんクエスト恋遊記
+    {0x129b40, {FULL_STRING, 0, 0, SLPM65737add, SLPM66028, "SLPM-66028"}},
+    // 幕末恋華・花柳剣士伝
+    {0x1a3fc0, {USING_CHAR | CODEC_UTF16, 0, 0, SLPM65988char<4>, 0, "SLPS-25818"}},
+    // 緋色の欠片 ～あの空の下で～
+    {0x1056D0, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, FSLPM66687, "SLPM-66687"}},
+    // 緋色の欠片 ～玉依姫奇譚～
+    {0x16C960, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, FSLPM65997, std::vector<const char *>{"SLPM-66453", "SLPM-66454"}}},
+    // 緋色の欠片 愛蔵版 ～玉依姫奇譚～
+    {0x12BBC0, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, FSLPM55216, "SLPM-55216"}},
+    // 翡翠の雫 ～緋色の欠片2～
+    {0x1AAB60, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, FSLPM65997, std::vector<const char *>{"SLPM-66824", "SLPM-66825"}}},
+    // 真翡翠の雫 ～緋色の欠片2～
+    {0x172990, {FULL_STRING, PCSX2_REG_OFFSET(a3), 0, 0, FSLPM65997, "SLPM-55217"}},
+    // ウィル・オ・ウィスプ
+    {0x1056E8, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, SLPM66841, std::vector<const char *>{"SLPM-66841", "SLPM-66842"}}},
     // THE 鑑識官
     {0x118958, {USING_CHAR | CODEC_UTF16, PCSX2_REG_OFFSET(a0), 0, SLPM62586, 0, "SLPM-62586"}},
     // Darling Special Backlash ～恋のエキゾースト・ヒート～
@@ -2740,6 +2801,8 @@ static const emfuncinfoX emfunctionhooks_1[] = {
     {0x17e928, {USING_CHAR | CODEC_UTF16, PCSX2_REG_OFFSET(a1), 0, DevilSummonerGlyph, 0, "SLPM-66246"}},
     // デビルサマナー 葛葉ライドウ 対 アバドン王 Plus
     {0x193720, {USING_CHAR | CODEC_UTF16, PCSX2_REG_OFFSET(a1), 0, DevilSummonerGlyph, 0, "SLPM-66679"}},
+    // テニスの王子様 SWEAT&TEARS 2
+    {0x15C430, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, SLPM65370, "SLPM-65370"}},
     // テニスの王子様 ドキドキサバイバル 山麓のMystic
     {0x15e1b0, {USING_CHAR | CODEC_UTF16, PCSX2_REG_OFFSET(a3), 0, SLPM66219<1>, 0, "SLPM-66608"}},
     // テニスの王子様 ～学園祭の王子様～
@@ -2783,10 +2846,6 @@ static const emfuncinfoX emfunctionhooks_1[] = {
     {0x1b6b70, {FULL_STRING, 0, 0, SLPM66351<0x1e7d400>, 0, "SLPM-66659"}},
     // 暴れん坊プリンセス
     {0x2D6490, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, SLPM65054, "SLPM-65054"}},
-    // 緋色の欠片 ～玉依姫奇譚～
-    {0x16C960, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, FSLPM65997, std::vector<const char *>{"SLPM-66453", "SLPM-66454"}}},
-    // 緋色の欠片 愛蔵版 ～玉依姫奇譚～
-    {0x12BBC0, {FULL_STRING, PCSX2_REG_OFFSET(a1), 0, 0, FSLPM55216, "SLPM-55216"}},
     // ギャラクシーエンジェルⅡ 無限回廊の鍵
     {0x284D08, {0, PCSX2_REG_OFFSET(a1), 0, 0, SLPM66779, std::vector<const char *>{"SLPM-66779", "SLPM-66780"}}},
     // 漢のためのバイブル THE 友情アドベンチャー ～炎多留・魂～

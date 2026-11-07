@@ -168,7 +168,7 @@ class _ToolButtonList(FluentSettingTree):
             conf = globalconfig["toolbutton"]["buttons"][k]
             item = QTreeWidgetItem()
             item.setData(0, Qt.ItemDataRole.UserRole, k)
-            self.addTopLevelItem(item)
+            self.addTopLevelItem(item)  # _a11yname 在 t 计算后设置（见下）
 
             def _refreshtoolicon():
                 gobject.base.translation_ui.titlebar.refreshtoolicon()
@@ -203,6 +203,7 @@ class _ToolButtonList(FluentSettingTree):
                 iconbtn,
                 icon2btn if icon2btn is not None else self._slot(iconbtn),
                 center=True))
+            self._a11yname(item, 4, t)
             self.setItemWidget(item, 4, self._cell(
                 D_getdoclink("alltoolbuttons.html#anchor-" + k)(),
                 LLabel(t),
@@ -211,28 +212,16 @@ class _ToolButtonList(FluentSettingTree):
             self.setItemWidget(
                 item, 5, self._movecell(functools.partial(self._move, k)))
 
-    def _applymove(self, idx1, idx2):
+    # 拖拽 / 上下移共用（_ondrop/_move 见基类）
+    def _rank_list(self):
+        return globalconfig["toolbutton"]["rank2"]
+
+    def _rank_applymove(self, idx1, idx2):
         rank = globalconfig["toolbutton"]["rank2"]
         k = rank.pop(idx1)
         rank.insert(idx2, k)
         self.rebuild()
         doadjust()
-
-    def _ondrop(self, idx1, idx2):
-        self._applymove(idx1, idx2)
-
-    def _move(self, k, up, tomax):
-        """上下移按钮：循环移一位（首行再上移到末尾、末行再下移到
-        开头），右键（tomax）置顶/置底。"""
-        rank = globalconfig["toolbutton"]["rank2"]
-        idx1 = rank.index(k)
-        if tomax:
-            idx2 = 0 if up else len(rank) - 1
-        else:
-            idx2 = (idx1 + (-1 if up else 1)) % len(rank)
-        if idx2 == idx1:
-            return
-        self._applymove(idx1, idx2)
 
 
 savebtns: "dict[tuple[str, str], IconButton]" = {}
@@ -326,6 +315,14 @@ specialbuttonsettings = {
         True,
         "保存到文件",
         "保存到剪贴板",
+    ),
+    # 进行一次OCR：左/右键哪个触发 原地显示翻译（另一个为普通单次OCR）
+    "ocr_once_1": functools.partial(
+        LeftRightFunctionSetter,
+        "ocr_once_left_inplace",
+        False,
+        "原地显示翻译",
+        "进行一次OCR",
     ),
 }
 

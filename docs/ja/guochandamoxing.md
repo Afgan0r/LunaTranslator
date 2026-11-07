@@ -62,10 +62,6 @@
     
     none/minimal -> 0 (推論を無効化、ただしGemini-2.5-Proモデルには適用されません), low -> 512, medium -> -1 (動的推論を有効化), high/xhigh -> 24576。
 
-1. #### thinking.type
-
-    一部のプラットフォーム（主にDeepSeek）がサポートする思考モードの切り替え機能。
-
 1. #### その他のパラメータ  
 
     上記は一般的なパラメータのみを提供しています。使用するプラットフォームで有用な未記載のパラメータがある場合は、手動でキーと値を追加してください。  
@@ -135,10 +131,6 @@
 
 **API Key** https://platform.deepseek.com/api_keys
 
-== Xiaomi MiMo
-
-**API Key** https://platform.xiaomimimo.com/#/console/api-keys
-
 == 阿里雲百煉大模型
 
 **API Key** https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -181,10 +173,6 @@
 
 >[!WARNING]
 >**API Key**は、百度智能雲IAMのAccess KeyとSecret Keyを使用してインターフェースのBearerTokenを生成し、それを**API Key**として記入するか、`Access Key`:`Secret Key`の形式で直接記入してください。千帆ModelBuilderの旧版v1バージョンのAPI KeyとSecret Keyとは互換性がないので注意してください。
-
-== MiniMax
-
-**API Key** https://platform.minimaxi.com/document/Fast%20access?key=66701cf51d57f38758d581b2
 
 :::
 

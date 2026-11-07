@@ -62,10 +62,6 @@ However, sometimes you may want to use multiple different API interface addresse
     
     none/minimal -> 0 (disable thinking; not applicable to Gemini-2.5-Pro), low -> 512, medium -> -1 (enable dynamic thinking), high/xhigh -> 24576.
 
-1. #### thinking.type
-    
-    The thinking mode switch supported by some platforms (mainly DeepSeek).
-
 1. #### Other Parameters  
 
     Only some common parameters are provided above. If the platform you are using offers other useful parameters not listed here, you can manually add key-value pairs.  
@@ -134,10 +130,6 @@ Replace `{endpoint}` and `{deployName}` with your endpoint and deployName.
 
 **API Key** https://platform.deepseek.com/api_keys
 
-== Xiaomi MiMo
-
-**API Key** https://platform.xiaomimimo.com/#/console/api-keys
-
 == Alibaba Cloud Bailian Large Model
 
 **API Key** https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -176,10 +168,6 @@ Replace `{endpoint}` and `{deployName}` with your endpoint and deployName.
 
 >[!WARNING]
 >**API Key** should be generated using Baidu Intelligent Cloud IAM's Access Key and Secret Key to create the BearerToken for the interface, or directly fill in the format `Access Key`:`Secret Key` in the **API Key** field. Note that this is not the API Key and Secret Key for the old v1 version of Qianfan ModelBuilder; they are not interchangeable.
-
-== MiniMax
-
-**API Key** https://platform.minimaxi.com/document/Fast%20access?key=66701cf51d57f38758d581b2
 
 :::
 

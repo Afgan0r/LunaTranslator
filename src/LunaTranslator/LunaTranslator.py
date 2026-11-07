@@ -42,10 +42,17 @@ from myutils.utils import (
 from language import Languages
 from myutils.wrapper import threader, tryprint
 from gui.showword import searchwordW
-from myutils.hwnd import getExeIcon, getcurrexe
+from myutils.hwnd import getExeIcon
+from NativeUtils import getcurrexe
 from textio.textsource.copyboard import copyboard
 from textio.textsource.texthook import texthook
 from textio.textsource.ocrtext import ocrtext
+from gui.ocrtranslationoverlay import (
+    route_overlay_translation,
+    overlay_source_displays,
+    overlay_source_is_current,
+    OCRRegionTask,
+)
 from textio.textsource.filetrans import filetrans
 from textio.textsource.mssr import mssr
 from gui.selecthook import hookselect
@@ -81,6 +88,18 @@ from gui.qevent import DarkLightChangedEvent
 from gui.setting.translate import autostartllamacpp
 from collections import OrderedDict
 from itertools import islice
+
+
+def _same_ocr_source(a, b):
+    """同一 OCR 来源判同：区域+修订（ocr_overlay_context）再加块序号。
+    同一选框里内容相同的两个块是不同来源，不能因文本相同被判重复；
+    普通字符串（无来源）之间仍按文本去重。"""
+    return (
+        getattr(a, "ocr_overlay_context", None)
+        == getattr(b, "ocr_overlay_context", None)
+        and getattr(a, "ocr_block_index", None)
+        == getattr(b, "ocr_block_index", None)
+    )
 
 
 class HistoryHelper:
@@ -166,6 +185,14 @@ class BASEOBJECT(QObject):
     llamacppposttask = pyqtSignal(str, object)
     wheelhistory = pyqtSignal(int)
     switchdisplayengine = pyqtSignal(str)
+    # OCR 选框右键菜单切换 原地显示翻译 -> 同步设置页开关（btn.setChecked）
+    ocr_inplace_switch = pyqtSignal(bool)
+    # 原地显示翻译 样式（背景色/文字色/对齐）任一侧修改 -> 同步另一侧控件
+    ocr_style_sync = pyqtSignal(str)
+    # 范围框右键菜单切换 鼠标穿透 -> 同步设置页开关（btn.setChecked）
+    ocr_mousetransp_sync = pyqtSignal(bool)
+    # 主窗口右键菜单切换 附加浏览器插件 -> 同步设置页引擎卡里的开关
+    webview_loadext_sync = pyqtSignal(bool)
 
     def connectsignal(self, signal: pyqtBoundSignal, callback):
         if signal in self.__cachesignal:
@@ -388,7 +415,7 @@ class BASEOBJECT(QObject):
                 self.translation_ui.refreshtooliconsignal.emit()
                 try:
                     if self.autoswitchgameuid:
-                        gameuid, _ = findgameuidofpath(windows.GetProcessFileName(_pid))
+                        gameuid, _ = findgameuidofpath(NativeUtils.GetProcessFileName(_pid))
                         if gameuid:
                             self.gameuid = gameuid
                 except:
@@ -506,14 +533,17 @@ class BASEOBJECT(QObject):
 
     def displayinfomessage(self, text, infotype):
         if infotype == "<notrans>":
-            self.translation_ui.displayres.emit(
-                dict(
-                    color=SpecialColor.RawTextColor,
-                    res=text,
-                    clear=True,
-                    klass=str(uuid.uuid4()),
+            overlay_live = overlay_source_displays(text)
+            route_overlay_translation(text, "ocr", text)
+            if not overlay_live:  # 原地显示时主窗口不显示
+                self.translation_ui.displayres.emit(
+                    dict(
+                        color=SpecialColor.RawTextColor,
+                        res=text,
+                        clear=True,
+                        klass=str(uuid.uuid4()),
+                    )
                 )
-            )
             self.currenttext_raw = text
             self.currenttext = text
             self.statusok = True
@@ -565,21 +595,27 @@ class BASEOBJECT(QObject):
         skippreprocess=False,
     ):
         with self.solvegottextlock:
-            succ = self.textgetmethod_1(
-                text,
-                is_auto_run=is_auto_run,
-                waitforresultcallback=waitforresultcallback,
-                waitforresultcallbackengine=waitforresultcallbackengine,
-                waitforresultcallbackengine_force=waitforresultcallbackengine_force,
-                erroroutput=erroroutput,
-                updateTranslate=updateTranslate,
-                isFromHook=isFromHook,
-                statusok=statusok,
-                isRefresh=isRefresh,
-                skippreprocess=skippreprocess,
-            )
-            if waitforresultcallback and not succ:
-                waitforresultcallback(TranslateResult())
+            sources = getattr(text, "ocr_region_sources", None)
+            requests = sources if sources and waitforresultcallback is None else (text,)
+            for region_text in requests:
+                if getattr(region_text, "ocr_direct_translation", False):
+                    self.displayinfomessage(region_text, "<notrans>")
+                    continue
+                succ = self.textgetmethod_1(
+                    region_text,
+                    is_auto_run=is_auto_run,
+                    waitforresultcallback=waitforresultcallback,
+                    waitforresultcallbackengine=waitforresultcallbackengine,
+                    waitforresultcallbackengine_force=waitforresultcallbackengine_force,
+                    erroroutput=erroroutput,
+                    updateTranslate=updateTranslate,
+                    isFromHook=isFromHook,
+                    statusok=statusok,
+                    isRefresh=isRefresh,
+                    skippreprocess=skippreprocess,
+                )
+                if waitforresultcallback and not succ:
+                    waitforresultcallback(TranslateResult())
 
     def __erroroutput(self, klass, erroroutput, _showrawfunction, e, t):
 
@@ -608,9 +644,22 @@ class BASEOBJECT(QObject):
             return
         if not text.strip():
             return
-        if is_auto_run and text == self.currenttext_raw and statusok == self.statusok:
+        if (
+            is_auto_run
+            and text == self.currenttext_raw
+            and statusok == self.statusok
+            and _same_ocr_source(text, self.currenttext_raw)
+        ):
             return
         origin = text
+        # 原地显示翻译：本条文本的译文走 OCR 覆盖层，主窗口不再显示
+        # 原文/译文（TTS、输出、历史、翻译记录不受影响）。全局开关或
+        # 来源容器强制原地显示（单次OCR常驻容器）均算
+        ocr_overlay_source = None
+        if not waitforresultcallback:
+            candidate = self.currenttext_raw if isRefresh else origin
+            if overlay_source_displays(candidate):
+                ocr_overlay_source = candidate
         __erroroutput = functools.partial(self.__erroroutput, None, erroroutput, None)
         currentsignature = uuid.uuid4() if not isRefresh else self.currentsignature
         try:
@@ -629,7 +678,12 @@ class BASEOBJECT(QObject):
             __erroroutput(stringfyerror(e), TextType.Error_origin)
             return
 
-        if is_auto_run and text == self.currenttext and statusok == self.statusok:
+        if (
+            is_auto_run
+            and text == self.currenttext
+            and statusok == self.statusok
+            and _same_ocr_source(origin, self.currenttext_raw)
+        ):
             return
         self.currentsignature = currentsignature
         if is_auto_run and (
@@ -640,7 +694,10 @@ class BASEOBJECT(QObject):
             if len(text) > globalconfig["maxlength"]:
                 text = text[: globalconfig["maxlength"]] + "……"
 
-            self.translation_ui.displayraw1.emit(text, updateTranslate, is_auto_run)
+            if ocr_overlay_source is None:
+                self.translation_ui.displayraw1.emit(
+                    text, updateTranslate, is_auto_run
+                )
             if statusok and not isRefresh:
                 self.transhis.getnewsentencesignal.emit(text)
             self.maybesetedittext(text)
@@ -659,9 +716,13 @@ class BASEOBJECT(QObject):
                     self.readcurrent()
                 self.dispatchoutputer(text, True)
 
-            _showrawfunction_unsafe = functools.partial(
-                self.translation_ui.displayraw1.emit, text, updateTranslate, is_auto_run
-            )
+            if ocr_overlay_source is None:
+                _showrawfunction_unsafe = functools.partial(
+                    self.translation_ui.displayraw1.emit,
+                    text,
+                    updateTranslate,
+                    is_auto_run,
+                )
 
         def __(_, uid, text):
             if _:
@@ -679,7 +740,12 @@ class BASEOBJECT(QObject):
                 pass
         self.maybesetedittext(text)
 
-        if not waitforresultcallback and not globalconfig.get("showfanyi", True):
+        if (
+            not waitforresultcallback
+            and not globalconfig.get("showfanyi", True)
+            # 显示翻译 关闭时不翻译——但走覆盖层（原地显示）的文本除外
+            and ocr_overlay_source is None
+        ):
             return _showrawfunction()
 
         text_solved, optimization_params = self.solvebeforetrans(text)
@@ -745,8 +811,10 @@ class BASEOBJECT(QObject):
                 return
 
         usefultranslators = set(real_fix_rank)
-        if globalconfig.get("fix_translate_rank", False) and (
-            not waitforresultcallback
+        if (
+            globalconfig.get("fix_translate_rank", False)
+            and (not waitforresultcallback)
+            and ocr_overlay_source is None  # 原地显示时主窗口不显示
         ):
             _showrawfunction = functools.partial(
                 self._delaypreparefixrank, _showrawfunction, real_fix_rank, is_auto_run
@@ -754,6 +822,7 @@ class BASEOBJECT(QObject):
         if not (updateTranslate or globalconfig.get("refresh_on_get_trans", False)):
             _showrawfunction()
             _showrawfunction = None
+        # ocr_overlay_source 已在函数开头计算（原地显示时主窗口不显示）
         read_trans_once_check = []
         for engine in real_fix_rank:
             if engine in globalconfig["fanyi"]:
@@ -774,6 +843,7 @@ class BASEOBJECT(QObject):
                 read_trans_once_check=read_trans_once_check,
                 erroroutput=erroroutput,
                 statusok=statusok,
+                ocr_overlay_source=ocr_overlay_source,
             )
         return True
 
@@ -816,6 +886,7 @@ class BASEOBJECT(QObject):
         read_trans_once_check: list,
         erroroutput,
         statusok=True,
+        ocr_overlay_source=None,
     ):
         callback = partial(
             self.GetTranslationCallback,
@@ -830,11 +901,20 @@ class BASEOBJECT(QObject):
             erroroutput,
             statusok=statusok,
             is_auto_run=is_auto_run,
+            ocr_overlay_source=ocr_overlay_source,
         )
+        # The legacy queue's third slot also protects synchronous API requests.
+        # OCRRegionTask uses that slot only when no external callback exists;
+        # the worker distinguishes it by ocr_overlay_task, never calls it, and
+        # cancels it by this region's provenance rather than the shared queue.
         task = (
             callback,
             text_solved,
-            waitforresultcallback,
+            (
+                OCRRegionTask(ocr_overlay_source)
+                if waitforresultcallback is None and ocr_overlay_source is not None
+                else waitforresultcallback
+            ),
             is_auto_run,
             optimization_params,
         )
@@ -875,13 +955,38 @@ class BASEOBJECT(QObject):
         iserror=False,
         statusok=True,
         is_auto_run=True,
+        ocr_overlay_source=None,
     ):
         with self.gettranslatelock:
             usefultranslators.discard(classname)
+            if ocr_overlay_source is not None and not overlay_source_is_current(
+                ocr_overlay_source
+            ):
+                return
             if (
                 waitforresultcallback is None
                 and currentsignature != self.currentsignature
             ):
+                # Other OCR regions remain current when the main window advances.
+                if ocr_overlay_source is None:
+                    return
+                if iserror:
+                    # 原地显示（多块派发时非末块的迟到错误）也要在
+                    # 主窗口报出来，不能静默丢弃
+                    self.__erroroutput(
+                        classname, erroroutput, _showrawfunction,
+                        res, TextType.Error_translator,
+                    )
+                    return
+                res = self.solveaftertrans(res, optimization_params)
+                if res:
+                    route_overlay_translation(ocr_overlay_source, classname, res)
+                    if iter_res_status in (0, 2) and statusok:
+                        self.history.appendtrans(currentsignature, classname, res)
+                        try:
+                            self.textsource.sqlqueueput((contentraw, classname, res))
+                        except:
+                            pass
                 return
 
             safe_callback = functools.partial(
@@ -903,11 +1008,20 @@ class BASEOBJECT(QObject):
                     safe_callback()
                 return
             self._delayshowraw(_showrawfunction)
+            if ocr_overlay_source is not None and not waitforresultcallback:
+                route_overlay_translation(ocr_overlay_source, classname, res)
+            elif (
+                currentsignature == self.currentsignature
+                and not waitforresultcallback
+                and self.history.viewptr == -1
+            ):
+                route_overlay_translation(self.currenttext_raw, classname, res)
             if (
                 (currentsignature == self.currentsignature)
                 and (iter_res_status in (0, 1))
                 and (not waitforresultcallback)
                 and (self.history.viewptr == -1)
+                and ocr_overlay_source is None  # 原地显示时主窗口不显示译文
             ):
                 displayreskwargs = dict(
                     name=_TR(dynamicapiname(classname)),
@@ -1234,6 +1348,17 @@ class BASEOBJECT(QObject):
                         translatorsetting.pop(key)
                     except:
                         pass
+            # 清理 rank 中已不存在的引擎项（如被删除的多实例 uuid）：它们
+            # 不会被 commonloader_warp 移除（只遍历存在的引擎），却一直占着
+            # 优先级序号，使自动切换条件 thisp==max(thisps) 永不成立
+            rankkey = {
+                "cishu": "cishuvisrank",
+                "fanyi": "fix_translate_rank_rank",
+            }.get(fanyiorcishu)
+            if rankkey:
+                for key in list(globalconfig[rankkey]):
+                    if key not in globalconfig[fanyiorcishu]:
+                        globalconfig[rankkey].remove(key)
             for key in globalconfig[fanyiorcishu]:
                 self.commonloader_warp(fanyiorcishu, dictobject, initmethod, key)
 

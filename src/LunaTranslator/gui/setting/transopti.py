@@ -81,6 +81,7 @@ class _PreProcessTree(FluentSettingTree):
             conf = postprocessconfig[post]
             item = QTreeWidgetItem()
             item.setData(0, Qt.ItemDataRole.UserRole, post)
+            self._a11yname(item, 2, conf["name"])
             self.addTopLevelItem(item)
             btn = self._configbtn(post, conf)
             namecell = self._cell(
@@ -131,8 +132,13 @@ class _PreProcessTree(FluentSettingTree):
         return D_getIconButton(
             callback=callback, tips=conf["name"] + "_设置")()
 
-    def _applymove(self, idx1, idx2):
-        """可见列表内 idx1 -> idx2，重映射回 postprocess_rank。"""
+    # 拖拽 / 上下移共用（_ondrop/_move 见基类）。可见列表内移动，
+    # 重映射回 postprocess_rank（不可见项位置不变）
+    def _rank_list(self):
+        return [p for p in globalconfig["postprocess_rank"]
+                if p in postprocessconfig]
+
+    def _rank_applymove(self, idx1, idx2):
         rank = globalconfig["postprocess_rank"]
         filtered = [p for p in rank if p in postprocessconfig]
         post = filtered.pop(idx1)
@@ -141,23 +147,6 @@ class _PreProcessTree(FluentSettingTree):
         globalconfig["postprocess_rank"] = [
             next(it) if p in postprocessconfig else p for p in rank]
         self.rebuild()
-
-    def _ondrop(self, idx1, idx2):
-        self._applymove(idx1, idx2)
-
-    def _move(self, post, up, tomax):
-        """上下移按钮：可见列表内循环移一位（首行再上移到末尾、末行
-        再下移到开头），右键（tomax）置顶/置底。"""
-        filtered = [p for p in globalconfig["postprocess_rank"]
-                    if p in postprocessconfig]
-        idx1 = filtered.index(post)
-        if tomax:
-            idx2 = 0 if up else len(filtered) - 1
-        else:
-            idx2 = (idx1 + (-1 if up else 1)) % len(filtered)
-        if idx2 == idx1:
-            return
-        self._applymove(idx1, idx2)
 
 
 class _TransOptimiTree(FluentSettingTree):
@@ -185,6 +174,7 @@ class _TransOptimiTree(FluentSettingTree):
                 continue
             item = QTreeWidgetItem()
             item.setData(0, Qt.ItemDataRole.UserRole, name)
+            self._a11yname(item, 2, visname)
             self.addTopLevelItem(item)
             setting = loadpostsettingwindowmethod(name)
 

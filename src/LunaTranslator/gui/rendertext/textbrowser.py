@@ -17,9 +17,34 @@ from gui.usefulwidget import qwidget_screen
 from gui.dynalang import LAction, LMenu
 from sometypes import WordSegResult
 from gui.rendertext.tooltipswidget import tooltipswidget
-from gui.rendertext.webview import get_sorted_toolbuttonitems
+
 
 reference: "set[QLabel]" = set()
+
+
+def get_sorted_toolbuttonitems():
+    buttons = []
+    for (
+        clicked,
+        rightclick,
+        tip,
+        name,
+        iconstate,
+        colorstate,
+        middleclick,
+    ) in gobject.base.translation_ui.create_buttons():
+        if not clicked:
+            continue
+        if not tip:
+            continue
+        if not gobject.base.translation_ui.buttondisplaychecker(name):
+            continue
+        sorter = (
+            {0: 0, 1: 2, 2: 1}[globalconfig["toolbutton"]["buttons"][name]["align"]],
+            globalconfig["toolbutton"]["rank2"].index(name),
+        )
+        buttons.append((tip, clicked, sorter, iconstate if iconstate else colorstate))
+    return sorted(buttons, key=lambda _: _[2])
 
 
 class WordSegResultX(WordSegResult):
@@ -248,8 +273,8 @@ class TextAreaBack(QLabel):
     def paintEvent(self, a0):
         parent: TextBrowser = self.parent()
         parent.yinyinglabels
-        c = QColor(ui_settings.get("text_area_background_color", "pink"))
-        c.setAlphaF(ui_settings.get("text_area_background_alpha", 85) / 100)
+        # 颜色自带 alpha（#AARRGGBB，取色器 alpha 模式）
+        c = QColor(ui_settings.get("text_area_background_color", "#d9ffc0cb"))
 
         painter = QPainter(self)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
@@ -258,17 +283,20 @@ class TextAreaBack(QLabel):
         __h = ui_settings.get("text_area_background_h", 5)
         __w = ui_settings.get("text_area_background_w", 5)
         xpath = QPainterPath()
-        for label in parent.yinyinglabels:
-            if not label.isVisible():
-                continue
-            r = QRectF()
-            r.setTop(label.realy() - __h)
-            r.setLeft(label.realx() - __w)
-            r.setHeight(label.realh() + 2 * __h)
-            r.setWidth(label.realw() + 2 * __w)
-            path = QPainterPath()
-            path.addRoundedRect(r, __r, __r)
-            xpath = xpath.united(path)
+        # 普通行标签在 yinyinglabels，流式输出（iter）的行标签在
+        # iteryinyinglabelsave——两处都要画，否则流式翻译没有区域背景
+        for labels in [parent.yinyinglabels, *parent.iteryinyinglabelsave.values()]:
+            for label in labels:
+                if not label.isVisible():
+                    continue
+                r = QRectF()
+                r.setTop(label.realy() - __h)
+                r.setLeft(label.realx() - __w)
+                r.setHeight(label.realh() + 2 * __h)
+                r.setWidth(label.realw() + 2 * __w)
+                path = QPainterPath()
+                path.addRoundedRect(r, __r, __r)
+                xpath = xpath.united(path)
         painter.fillPath(xpath, c)
         return super().paintEvent(a0)
 
@@ -429,6 +457,15 @@ class TextBrowser(QWidget, dataget):
         menu.addAction(drag)
         menu.addAction(hide)
         menu.addAction(wheel)
+        # 渲染引擎切换（同历史文本 Qt 模式菜单；处理器在 wrapper 上，
+        # 与设置页互相同步）。浏览器插件两项只在 webview 模式有意义，
+        # 不进 Qt 菜单
+        useweb = LAction("使用Webview2显示", menu)
+        useweb.setCheckable(True)
+        # 本菜单只在 Qt 引擎激活时出现，恒为关
+        useweb.setChecked(False)
+        menu.addSeparator()
+        menu.addAction(useweb)
         action = menu.exec(QCursor.pos())
         if action == search:
             self.parent().clear(False)
@@ -437,6 +474,8 @@ class TextBrowser(QWidget, dataget):
             extras[action]()
         elif action == setting:
             gobject.base.settin_ui_showsignal.emit()
+        elif action == useweb:
+            self.parent().menuswitchengine()
         elif action == drag:
             globalconfig["dragable"] = drag.isChecked()
         elif action == hide:
@@ -806,10 +845,13 @@ class TextBrowser(QWidget, dataget):
             not globalconfig.get("isshowrawtext", True)
         ):
             return True
-        if (texttype in (TextType.Translate, TextType.Error_translator)) and (
+        if (texttype in (TextType.Translate,)) and (
             not globalconfig.get("showfanyi", True)
         ):
             return True
+        # 错误行不受 显示翻译 开关控制（原地显示时常关闭 显示翻译，
+        # 但错误仍要报给用户），只受 显示错误信息 控制（同 webview 渲染
+        # 的 .lunatranslator_error 独立开关）
         if (texttype in (TextType.Error_translator, TextType.Error_origin)) and (
             not globalconfig.get("showtranexception", True)
         ):

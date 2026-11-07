@@ -62,9 +62,6 @@
     
     none/minimal -> 0 (추론 비활성화, 단 Gemini-2.5-Pro 모델에는 적용되지 않음), low -> 512, medium -> -1 (동적 추론 활성화), high/xhigh -> 24576.
 
-1. #### thinking.type
-    일부 플랫폼(주로 DeepSeek)에서 지원하는 사고 모드 전환 기능.
-
 1. #### 기타 파라미터  
 
     위에서는 일반적인 파라미터만 제공했습니다. 사용 중인 플랫폼에서 다른 유용한 파라미터를 제공하는 경우 직접 키-값을 추가할 수 있습니다.  
@@ -134,10 +131,6 @@
 
 **API Key** https://platform.deepseek.com/api_keys
 
-== Xiaomi MiMo
-
-**API Key** https://platform.xiaomimimo.com/#/console/api-keys
-
 == 알리바이둔 백련 대형 모델
 
 **API Key** https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -179,10 +172,6 @@
 
 >[!WARNING]
 >**API 키** 바이두 스마트 클라우드 IAM의 Access Key, Secret Key를 사용하여 인터페이스의 BearerToken 생성 후 **API 키**로 입력하거나, `Access Key`:`Secret Key` 형식으로 직접 **API 키**에 함께 입력. 주의: 첸판 ModelBuilder의 구버전 v1 인터페이스 API Key, Secret Key와 혼용 불가.
-
-== MiniMax
-
-**API Key** https://platform.minimaxi.com/document/Fast%20access?key=66701cf51d57f38758d581b2
 
 :::
 

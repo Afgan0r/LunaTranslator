@@ -11,17 +11,17 @@ from sometypes import TranslateResult, TranslateError, WordSegResult
 from urllib.parse import urlencode
 import json, gobject, base64
 from myutils.ocrutil import ocr_run
-from gui.rendertext.webview import TextBrowser, somecommon as somecommon_1
+from gui.rendertext.webview_common import webview_common
 from gui.transhist import somecommon as somecommon_2, wvtranshist
 from network.server.servicecollection_1 import (
     mainuiwsoutputsave,
     transhistwsoutputsave,
     wsoutputsave,
 )
-import threading, functools
+import threading, functools, queue
 from qtsymbols import *
 from myutils.config import globalconfig, _TR, dynamicapiname
-from myutils.utils import dynamiccishuname
+from myutils.utils import dynamiccishuname, stringfyerror
 from tts.basettsclass import TTSResult
 
 
@@ -48,12 +48,12 @@ class Pagetranshist(HTTPHandler):
         return FileResponse(wvtranshist.loadex_())
 
 
-class internalservicemainuiws(WSHandler, somecommon_1):
+class internalservicemainuiws(WSHandler, webview_common):
     path = "/__internalservice/mainuiws"
 
     def __init__(self, info, sock):
         super().__init__(info, sock)
-        somecommon_1.__init__(self)
+        webview_common.__init__(self)
 
     def parse(self, info):
         mainuiwsoutputsave.append(self)
@@ -239,15 +239,62 @@ class APISearchWord(HTTPHandler):
         for _ in range(cnt):
             sema.acquire()
             k, result = ret[_]
+            if isinstance(result, Exception):
+                # 否则 json 序列化失败会中断整个流
+                yield dict(
+                    name=_TR(dynamiccishuname(k)), error=stringfyerror(result), id=k
+                )
+                continue
             if not result:
                 continue
             yield dict(name=_TR(dynamiccishuname(k)), result=result, id=k)
+
+    def streamhelper(self, word, dictid):
+        """流式查词（text/event-stream）：每个词典的中间态与最终结果逐条
+        推送。事件字段 name/result/id + done（中间态 False，最终 True；
+        最终为异常时是 error 而非 result；空结果不发事件）。"""
+        _q = queue.Queue()
+
+        def on_chunk(k, html):
+            _q.put((k, html, False))
+
+        def callback(k, result):
+            _q.put((k, result, True))
+
+        cnt = 0
+        for k, cishu in gobject.base.cishus.items():
+            if dictid and k != dictid:
+                continue
+            cnt += 1
+            cishu.safesearch(
+                functools.partial(callback, k),
+                word,
+                on_chunk=functools.partial(on_chunk, k),
+            )
+        finished = 0
+        while finished < cnt:
+            k, result, done = _q.get()
+            if done:
+                finished += 1
+            if isinstance(result, Exception):
+                yield dict(
+                    name=_TR(dynamiccishuname(k)),
+                    error=stringfyerror(result),
+                    id=k,
+                    done=True,
+                )
+                continue
+            if not result:
+                continue
+            yield dict(name=_TR(dynamiccishuname(k)), result=result, id=k, done=done)
 
     def parse(self, _: RequestInfo):
         word = _.query.get("word")
         if not word:
             raise Exception()
         dictid = _.query.get("id")
+        if _.query.get("stream", "").lower() in ("1", "true"):
+            return self.streamhelper(word, dictid)
         if not dictid:
             return self.iterhelper(word)
 
@@ -277,7 +324,7 @@ class PageMainui(HTTPHandler):
     path = "/page/mainui"
 
     def parse(self, _):
-        return FileResponse(TextBrowser.loadex_())
+        return FileResponse(webview_common.loadex_())
 
 
 class Pageocr(HTTPHandler):

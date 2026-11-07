@@ -37,6 +37,7 @@ from gui.usefulwidget import (
 from gui.dynalang import LPushButton, LFormLayout, LLabel
 from gui.fluent.expander import ExExpander
 from gui.fluent.colorpicker import ColorPickerButton
+from gui.ocrtranslationoverlay import refresh_overlays
 
 
 def __changeuibuttonstate(x):
@@ -48,6 +49,8 @@ def __changeuibuttonstate(x):
 
 def mayberealtimesetfont(_=None):
     gobject.base.translation_ui.translate_text.setfontstyle()
+    # 原地显示翻译覆盖层跟随译文（字号/字体/加粗）
+    refresh_overlays()
 
 
 def createtextfontcom(key, df):
@@ -223,6 +226,11 @@ def resetgroudswitchcallback(self, group):
                 _btn2.setEnabled(x),
             ),
             default=True,
+        )
+        # 主窗口右键菜单切换 -> 同步本开关与编辑按钮（setChecked 不触发
+        # clicked/callback，不会重入）；引擎卡重建时旧控件销毁自动断连
+        gobject.base.webview_loadext_sync.connect(
+            lambda x: (switch2.setChecked(x), _btn2.setEnabled(x))
         )
         self.engineexpander.addContentWidget(
             getboxwidget(["附加HTML", 1, switch, _btn])
@@ -450,24 +458,9 @@ def __textbackexpander(self):
                     self,
                     ui_settings,
                     "text_area_background_color",
+                    alpha=True,
                     callback=gobject.base.translation_ui.translate_text.setTextAreaBackStyle,
-                    default="pink",
-                ),
-            ]
-        )
-    )
-    exp.addContentWidget(
-        getboxwidget(
-            [
-                "不透明度",
-                1,
-                getspinbox(
-                    0,
-                    100,
-                    ui_settings,
-                    "text_area_background_alpha",
-                    callback=gobject.base.translation_ui.translate_text.setTextAreaBackStyle,
-                    default=85,
+                    default="#d9ffc0cb",  # pink @85%（原默认观感：pink+不透明度85）
                 ),
             ]
         )

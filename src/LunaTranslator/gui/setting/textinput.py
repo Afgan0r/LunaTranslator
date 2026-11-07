@@ -10,7 +10,6 @@ from gui.dynalang import LLabel, LStandardItemModel, LDialog
 from myutils.wrapper import Singleton
 from textio.textsource.mssr import MSSR, LiveCaptions
 from gui.fluent.expander import ExExpander
-from gui.fluent.tabwidget import make_content_card
 from gui.usefulwidget import (
     D_getsimplecombobox,
     D_getspinbox,
@@ -102,7 +101,7 @@ def gethookgrid_em(dic=None):
             "显示模式",
             "",
             D_getsimplecombobox(
-                ["翻译", "原文_翻译", "翻译_原文"],
+                ["翻译", "原文_翻译", "翻译_原文", "原文"],
                 dic,
                 "displaymode",
                 default=0,

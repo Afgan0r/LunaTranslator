@@ -61,9 +61,6 @@
     
     none/minimal -> 0（停用思考，但不適用於 Gemini-2.5-Pro 模型），low -> 512，medium -> -1（開啟動態思維），high/xhigh -> 24576。
 
-1. #### thinking.type
-    部份平台（主要是 DeepSeek）支援的思考模式開關。
-
 1. #### 其他參數
 
     以上只提供了一些常見的參數，如果使用的平台提供了其他未列出的有用的參數，可以自行新增鍵值。
@@ -133,10 +130,6 @@
 
 **API Key** https://platform.deepseek.com/api_keys
 
-== Xiaomi MiMo
-
-**API Key** https://platform.xiaomimimo.com/#/console/api-keys
-
 == 阿里雲百煉大模型
 
 **API Key** https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -178,10 +171,6 @@
 
 >[!WARNING]
 >**API Key** 請使用百度智能雲 IAM 的 Access Key、Secret Key 來生成介面的 BearerToken 後作為 **API Key** 填入，或者按照`Access Key`:`Secret Key`的格式直接將兩者一起填入 **API Key** 中。注意，不是千帆 ModelBuilder 的舊版 v1 版本介面的 API Key、Secret Key，兩者不能通用。
-
-== MiniMax
-
-**API Key** https://platform.minimaxi.com/document/Fast%20access?key=66701cf51d57f38758d581b2
 
 :::
 

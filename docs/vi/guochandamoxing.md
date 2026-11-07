@@ -61,9 +61,6 @@ Tuy nhiên, đôi khi bạn có thể muốn sử dụng nhiều địa chỉ gi
     
     none/minimal -> 0 (tắt suy luận, không áp dụng cho mô hình Gemini-2.5-Pro), low -> 512, medium -> -1 (bật suy luận động), high/xhigh -> 24576.
 
-1. #### thinking.type
-    Công tắc chế độ suy nghĩ được hỗ trợ bởi một số nền tảng (chủ yếu là DeepSeek).
-
 1. #### Các tham số khác
 
     Trên đây chỉ cung cấp một số tham số phổ biến. Nếu nền tảng bạn sử dụng cung cấp các tham số hữu ích khác chưa được liệt kê, có thể tự thêm cặp khóa-giá trị.
@@ -132,10 +129,6 @@ Thay thế `{endpoint}` và `{deployName}` bằng endpoint và deployName của 
 
 **API Key** https://platform.deepseek.com/api_keys
 
-== Xiaomi MiMo
-
-**API Key** https://platform.xiaomimimo.com/#/console/api-keys
-
 == Alibaba Cloud Bailian Large Model
 
 **API Key** https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -178,10 +171,6 @@ Thay thế `{endpoint}` và `{deployName}` bằng endpoint và deployName của 
 
 >[!WARNING]
 >**API Key** nên được tạo bằng cách sử dụng Access Key và Secret Key của Baidu Intelligent Cloud IAM để tạo BearerToken cho giao diện, hoặc điền trực tiếp theo định dạng `Access Key`:`Secret Key` trong trường **API Key**. Lưu ý rằng đây không phải là API Key và Secret Key của phiên bản cũ v1 của Qianfan ModelBuilder; chúng không thể thay thế cho nhau.
-
-== MiniMax
-
-**API Key** https://platform.minimaxi.com/document/Fast%20access?key=66701cf51d57f38758d581b2
 
 :::
 

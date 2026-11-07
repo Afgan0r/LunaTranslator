@@ -81,8 +81,7 @@ def createsomecontrols(
             return dic.get(kDWM, 0) != 0 and not vRsys()
 
         vR = functools.partial(__vR, kDWM, vRsys)
-        if not vR():
-            spin1.hide()
+        spin1.setEnabled(vR())
         yinyinguse = functools.partial(__yinyinguse, kDWM, vRsys)
         __shadowxx = getsmalllabel("阴影")()
         __shadowxx2 = getsimpleswitch(
@@ -101,9 +100,9 @@ def createsomecontrols(
             callbackR,
             _,
         ):
-            spin1.setVisible(vR()),
-            __shadowxx.setVisible(yinyinguse()),
-            __shadowxx2.setVisible(yinyinguse()),
+            spin1.setEnabled(vR()),
+            __shadowxx.setEnabled(yinyinguse()),
+            __shadowxx2.setEnabled(yinyinguse()),
             callbackR()
 
         if gobject.sys_ge_win_11:
@@ -116,11 +115,8 @@ def createsomecontrols(
                 ),
             )
 
-        if not yinyinguse():
-            __shadowxx.hide()
-            __shadowxx2.hide()
-        __shadowxx = __shadowxx
-        __shadowxx2 = __shadowxx2
+        __shadowxx.setEnabled(yinyinguse())
+        __shadowxx2.setEnabled(yinyinguse())
 
         def __cb(
             yinyinguse,
@@ -131,9 +127,9 @@ def createsomecontrols(
             callbackDWM,
             _,
         ):
-            __shadowxx.setVisible(yinyinguse())
-            __shadowxx2.setVisible(yinyinguse())
-            spin1.setVisible(vR())
+            __shadowxx.setEnabled(yinyinguse())
+            __shadowxx2.setEnabled(yinyinguse())
+            spin1.setEnabled(vR())
             callbackR()
             callbackDWM()
 
@@ -158,7 +154,18 @@ def createsomecontrols(
                 __shadowxx2,
             ],
         )
-    return getboxlayout([spin1, "", "使用系统圆角", sw]) if sw else spin1, effectlayout
+    return (
+        getboxlayout(
+            [
+                getsmalllabel("使用系统圆角"),
+                sw,
+                getsmalllabel(""),
+                spin1,
+            ]
+        )
+        if sw
+        else spin1
+    ), effectlayout
 
 
 class dialog_syssetting(LDialog):
@@ -491,7 +498,13 @@ class WordViewTooltip(resizableframeless, DraggableQWidget):
         if self.__state != 2:
             return
         if fromhover and not force:
-            if word == self.lastword:
+            # 注意不能只看 lastword：Leave()/close() 会把它清掉，但窗口
+            # 可能还开着且正显示同一个词——此时同词 hover 再来（阅读中
+            # 鼠标晃出去又回来）会触发完整重查，整页刷新丢滚动位置。
+            # 窗口可见且正在显示该词时只追踪不重查；隐藏时才完整重查。
+            if word == self.lastword or (
+                not append and self.isVisible() and word == self.view.currWord
+            ):
                 return self.moveresult_1()
             self.lastword = word
             if not show:

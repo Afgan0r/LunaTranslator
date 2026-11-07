@@ -1,5 +1,5 @@
 from qtsymbols import *
-import functools, os
+import functools, os, uuid, shutil, copy
 import gobject
 from myutils.utils import splitocrtypes, dynamiccishuname, selectdebugfile, cishuexits
 from myutils.config import globalconfig, _TR
@@ -14,6 +14,7 @@ from gui.usefulwidget import (
     listediter,
     D_getIconButton,
     getIconButton,
+    IconButton,
     LPushButton,
     NQGroupBox,
     getsmalllabel,
@@ -151,6 +152,9 @@ def renameapi(qlabel: QLabel, apiuid, self, _=None):
     menu = QMenu(qlabel)
     editname = LAction("重命名", menu)
     menu.addAction(editname)
+    copy = LAction("复制", menu)
+    if _selfbuildorigin(apiuid) == "selfbuild":
+        menu.addAction(copy)
     useproxy = LAction("使用代理", menu)
     useproxy.setCheckable(True)
     if globalconfig.get("useproxy", True) and globalconfig["cishu"][apiuid].get(
@@ -178,6 +182,9 @@ def renameapi(qlabel: QLabel, apiuid, self, _=None):
     elif action == useproxy:
         globalconfig["cishu"][apiuid]["useproxy"] = useproxy.isChecked()
 
+    elif action == copy:
+        copyselfbuild(self, apiuid)
+
     elif action == delete:
         deletecishu(self, apiuid)
 
@@ -189,11 +196,61 @@ def getrenameablellabel(uid, self):
     return name
 
 
+def _selfbuildorigin(apiuid):
+    xx = apiuid
+    while True:
+        cp = globalconfig["cishu"].get(xx, {}).get("copyfrom")
+        if not cp:
+            return xx
+        xx = cp
+
+
+def copyselfbuild(self, apiuid):
+    """复制自定义辞书实例：不拷引擎文件（cishuexits 经 copyfrom 回溯
+    解析到 cishu.selfbuild，同一引擎类以自身 typename 实例化），副本带
+    隐藏 arg selfbuild_file 指向自己的用户文件（复制来源实例的文件创建），
+    各实例配置/代码互不影响；未设置该 arg 的原型加载默认文件。"""
+    uid = str(uuid.uuid4())
+    globalconfig["cishu"][uid] = copy.deepcopy(globalconfig["cishu"][apiuid])
+    globalconfig["cishu"][uid]["copyfrom"] = "selfbuild"
+    globalconfig["cishu"][uid]["use"] = False
+    globalconfig["cishu"][uid].pop("name_self_set", None)
+    globalconfig["cishu"][uid]["name"] = dynamiccishuname(apiuid) + "_copy"
+    fname = "selfbuild_cishu_{}.py".format(uid[:8])
+    src = gobject.getconfig(
+        globalconfig["cishu"][apiuid].get("selfbuild_file") or "selfbuild_cishu.py"
+    )
+    if os.path.exists(src):
+        shutil.copy(src, gobject.getconfig(fname))
+    globalconfig["cishu"][uid]["selfbuild_file"] = fname
+    rebuildcishugrid(self)
+    return uid
+
+
 def initinternal(self, names):
     cishugrid = []
     line = []
     i = 0
-    for cishu in names:
+
+    def _gear(cishu, which, reloadcb):
+        items = autoinitdialog_items(globalconfig["cishu"][cishu])
+
+        def __(cishu, _which=which):
+            autoinitdialog(
+                self,
+                globalconfig["cishu"][cishu]["args"],
+                dynamiccishuname(cishu),
+                800,
+                items,
+                _which,
+                cishu,
+                callback=reloadcb,
+            )
+
+        return D_getIconButton(callback=functools.partial(__, cishu))
+
+    # MDict（离线）融入列表排最前：其下载图标展开卡顶的资源下载面板
+    for cishu in ["mdict"] + list(names):
         which = cishuexits(cishu)
         if not which:
             continue
@@ -202,55 +259,48 @@ def initinternal(self, names):
             functools.partial(getrenameablellabel, cishu, self),
             D_getsimpleswitch(globalconfig["cishu"][cishu], "use", callback=reloadcb),
         ]
-        if "args" in globalconfig["cishu"][cishu]:
-
-            items = autoinitdialog_items(globalconfig["cishu"][cishu])
-
-            def __(cishu, _which=which):
-                autoinitdialog(
-                    self,
-                    globalconfig["cishu"][cishu]["args"],
-                    dynamiccishuname(cishu),
-                    800,
-                    items,
-                    _which,
-                    cishu,
-                    callback=reloadcb,
-                )
-
-            line += [
-                D_getIconButton(callback=functools.partial(__, cishu)),
-            ]
-        elif cishu == "selfbuild":
+        if "args" in globalconfig["cishu"][cishu] and cishu != "mdict":
+            line += [_gear(cishu, which, reloadcb), "", ""]
+        elif _selfbuildorigin(cishu) == "selfbuild":
+            # 原型与复制实例（编辑各自加载的用户文件）
             line += [
                 D_getIconButton(
-                    callback=lambda: selectdebugfile("selfbuild_cishu.py"),
+                    callback=functools.partial(
+                        selectdebugfile,
+                        globalconfig["cishu"][cishu].get("selfbuild_file")
+                        or "selfbuild_cishu.py",
+                    ),
                     icon="fa.edit",
-                )
+                ),
+                "",
+                "",
             ]
+        elif cishu == "mdict":
+            # MDict 也有 args，但走本分支：设置之外再挂下载图标
+            dlbtn = IconButton(
+                icon="fa.download",
+                checkable=True,
+                checkablechangecolor=False,
+                tips="资源下载",
+            )
+            dlbtn.clicked.connect(
+                lambda checked: self._mdictdlpanel.setVisible(checked)
+            )
+            line += [_gear(cishu, which, reloadcb), dlbtn, ""]
         else:
-            line += [""]
+            line += ["", "", ""]
         if i % 3 == 2:
+            if line[-1] == "":
+                line.pop(-1)
             cishugrid.append(line)
             line = []
-        else:
-            line += [""]
         i += 1
     if len(line):
         cishugrid.append(line)
     if cishugrid:
-        cishugrid[-1] += [""] * (4 + 4 + 3 - len(cishugrid[-1]))
+        cishugrid[-1] += [""] * (5 + 5 + 4 - len(cishugrid[-1]))
     check_grid_append(cishugrid)
     return cishugrid
-
-
-def clickcallback2(l: list, lay: VisLFormLayout, checked):
-    if not l:
-        l.append(0)
-        lay.addRow(resourcewidget2())
-        return
-
-    lay.setRowVisible(1, checked)
 
 
 def clickcallback(l: list, lay: VisLFormLayout, checked):
@@ -295,38 +345,25 @@ def fenciqisettings(self):
     return box
 
 
-def mdictsettings(self):
-    box = GroupCardWidget("离线", parent=self)
-    lay = VisLFormLayout(box.contentWidget())
-    box.setContentLayout(lay)
-    l1 = QHBoxLayout()
-
-    lay.addRow(l1)
-    l1.addWidget(getrenameablellabel("mdict", self))
-    reloadcb = functools.partial(gobject.base.startxiaoxueguan, "mdict")
-    l1.addWidget(
-        getsimpleswitch(globalconfig["cishu"]["mdict"], "use", callback=reloadcb)
-    )
-    items = autoinitdialog_items(globalconfig["cishu"]["mdict"])
-    _3 = D_getIconButton(
-        callback=functools.partial(
-            autoinitdialog,
-            self,
-            globalconfig["cishu"]["mdict"]["args"],
-            dynamiccishuname("mdict"),
-            800,
-            items,
-            callback=reloadcb,
-        ),
-    )
-    l1.addWidget(_3())
-    l1.addStretch(1)
-    btn = LPushButton("资源下载")
-    btn.setCheckable(True)
-    reflist = []
-    btn.clicked.connect(functools.partial(clickcallback2, reflist, lay))
-    l1.addWidget(btn)
-    l1.addStretch(8)
+def cishunamelist(self, online):
+    """辞书卡内容：顶部 MDict 资源下载面板（初始隐藏，MDict 词条的下载
+    图标展开，同 llama.cpp 大模型 的下载行），下方全部辞书网格——MDict
+    融入在线辞书排最末。cishugridinternal 供社区辞书安装后
+    rebuildcishugrid 重建。"""
+    box = QWidget()
+    vlay = QVBoxLayout(box)
+    vlay.setContentsMargins(0, 0, 0, 0)
+    vlay.setSpacing(8)
+    dlpanel = resourcewidget2("MDict")
+    dlpanel.setVisible(False)
+    self._mdictdlpanel = dlpanel
+    vlay.addWidget(dlpanel)
+    gridw = QWidget()
+    grid = QGridLayout(gridw)
+    grid.setContentsMargins(0, 0, 0, 0)
+    vlay.addWidget(gridw)
+    automakegrid(grid, initinternal(self, online))
+    self.cishugridinternal = grid
     return box
 
 
@@ -369,9 +406,7 @@ def fontsettings(parent):
             1,
             _createnewtextfontcom(
                 "kanafont",
-                globalconfig.get(
-                    "fonttype", gobject.tempconfig.get("fonttype", "")
-                ),
+                globalconfig.get("fonttype", gobject.tempconfig.get("fonttype", "")),
             ),
             getIconSwitch(
                 globalconfig,
@@ -463,16 +498,7 @@ def setTabcishu_l(self):
         widget=functools.partial(_headercishubuttons, self),
         type="grid",
         grid=[
-            [(functools.partial(mdictsettings, self), 0)],
-            [
-                dict(
-                    title="在线",
-                    type="grid",
-                    parent=self,
-                    internallayoutname="cishugridinternal",
-                    grid=initinternal(self, online),
-                )
-            ],
+            [(functools.partial(cishunamelist, self, online), 0)],
         ],
     )
 
@@ -485,8 +511,14 @@ def setTabcishu_l(self):
         return edit
 
     def __fenciexpander(
-        title, switch, trailing=None, grid=(), switchlabel=None, leading=None,
-        afterswitch=None, content=None
+        title,
+        switch,
+        trailing=None,
+        grid=(),
+        switchlabel=None,
+        leading=None,
+        afterswitch=None,
+        content=None,
     ):
         """折叠卡（同 LICENSE 的 ExExpander）：标题 +（doclink 紧随）+ 开关（折叠按钮左边）。"""
         # content= 子项面板形式时内容右侧让出折叠按钮区（60px）
@@ -766,8 +798,10 @@ def setTabcishu_l(self):
         enable=globalconfig.get("isshowrawtext", True),
         grid=(
             [(yufajialiang, 0)],
-            [hoverinfoexp, copywordexp],
-            [searchwordexp, searchword_Sexp],
+            # [hoverinfoexp],
+            [copywordexp],
+            [searchwordexp],
+            [searchword_Sexp],
         ),
     )
 

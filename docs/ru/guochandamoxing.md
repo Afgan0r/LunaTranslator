@@ -62,9 +62,6 @@
     
     none/minimal -> 0 (отключение рассуждений, не применимо к модели Gemini-2.5-Pro), low -> 512, medium -> -1 (включение динамического мышления), high/xhigh -> 24576.
 
-1. #### thinking.type
-    Переключатель режима мышления, поддерживаемый некоторыми платформами (в основном DeepSeek).
-
 1. #### Другие параметры  
 
     Выше перечислены только основные параметры. Если платформа поддерживает другие полезные параметры, их можно добавить вручную в формате «ключ-значение».  
@@ -134,10 +131,6 @@
 
 **API Key** https://platform.deepseek.com/api_keys
 
-== Xiaomi MiMo
-
-**API Key** https://platform.xiaomimimo.com/#/console/api-keys
-
 == Alibaba Cloud Bailian
 
 **API Key** https://bailian.console.aliyun.com/?apiKey=1#/api-key
@@ -179,10 +172,6 @@
 
 >[!WARNING]
 >**API Key** Для заполнения **API Key** используйте Access Key и Secret Key из Baidu Intelligent Cloud IAM для генерации BearerToken интерфейса, либо введите их напрямую в **API Key** в формате `Access Key`:`Secret Key`. Обратите внимание, что это не API Key и Secret Key устаревшей версии v1 интерфейса Qianfan ModelBuilder - они не взаимозаменяемы.
-
-== MiniMax
-
-**API Key** https://platform.minimaxi.com/document/Fast%20access?key=66701cf51d57f38758d581b2
 
 :::
 
