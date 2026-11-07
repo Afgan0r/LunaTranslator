@@ -67,7 +67,7 @@ code, memory contracts, live systems or publication.
 ## Updates and Git
 
 `upstream` is `HIllya51/LunaTranslator`; `origin` is
-`Afgan0r/LunaTranslator`. Personal changes are maintained on `master`.
+`Afgan0r/LunaTranslator`. Personal changes are maintained on `main`.
 Preserve upstream history and integrate upstream by merge only when the user
 explicitly requests an update. A freshness fetch is not permission to merge.
 
@@ -76,7 +76,7 @@ updates automatically, including cached packages. No release-publication
 pipeline is required for this local workflow.
 
 Preserve unrelated changes. Automatically commit completed, verified task
-changes directly to `master` and push to `origin/master` without asking for
+changes directly to `main` and push to `origin/main` without asking for
 separate confirmation. Never force-push or rewrite existing history.
 Use English Conventional Commits. Do not publish binary releases or change
 the default branch without an explicit request.

@@ -9,7 +9,7 @@ stay outside Git.
 
 The original repository history is preserved. `upstream` points to
 [HIllya51/LunaTranslator](https://github.com/HIllya51/LunaTranslator).
-The personal branch is `master`; the earlier `grisaia-openai` branch remains
+The personal branch is `main`; the earlier `grisaia-openai` branch remains
 in local history. `origin` points to
 [Afgan0r/LunaTranslator](https://github.com/Afgan0r/LunaTranslator).
 Upstream merges and local runtime updates require a separate explicit request.
@@ -25,7 +25,7 @@ Integrate updates through a merge, after checking for local changes:
 
 ```sh
 git fetch --prune upstream
-git switch master
+git switch main
 git merge upstream/main
 python -X utf8 -m unittest discover -s tests/grisaia -v
 ```
