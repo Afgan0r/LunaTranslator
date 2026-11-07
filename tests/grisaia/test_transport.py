@@ -28,8 +28,9 @@ class ScriptedClient(ResponsesClient):
         self.replies = list(replies)
         self.calls = []
 
-    def _request(self, host, method, path, body=None, headers=None):
+    def _request(self, host, method, path, body=None, headers=None, timeout=None):
         self.calls.append((host, method, path, body))
+        self.last_timeout = timeout
         result = self.replies.pop(0)
         if isinstance(result, Exception):
             raise result
@@ -75,12 +76,17 @@ class TransportTests(unittest.TestCase):
         response["model"] = "gpt-6.1-sol"
         client = ScriptedClient(self.config, [self.geo, (200, response), (200, completed())])
         client.compact([{"role": "user", "content": "Synthetic history"}], "key")
+        self.assertEqual(client.last_timeout, 300)
         client.translate([{"role": "user", "content": "Next"}], "key")
+        self.assertEqual(client.last_timeout, self.config.timeout)
         compact = json.loads(client.calls[1][3])
         normal = json.loads(client.calls[2][3])
         self.assertEqual(compact["model"], "gpt-6.1-sol")
         self.assertEqual(compact["reasoning"], {"effort": "high"})
-        self.assertEqual(compact["prompt_cache_key"], "key-summary")
+        self.assertEqual(compact["prompt_cache_key"], "key-context-v2")
+        self.assertEqual(compact["text"], {"format": {"type": "json_object"}})
+        self.assertEqual(compact["max_output_tokens"], 32768)
+        self.assertNotIn("text", normal)
         self.assertEqual(normal["model"], self.config.model)
         self.assertEqual(normal["reasoning"], {"effort": "low"})
         self.assertEqual(client.compact_every, 100)
@@ -105,10 +111,10 @@ class TransportTests(unittest.TestCase):
         client = ScriptedClient(config, [self.geo, (200, completed())])
         recorded = []
         request = client._request
-        def capture_request(host, method, path, body=None, headers=None):
+        def capture_request(host, method, path, body=None, headers=None, timeout=None):
             if host == "api.openai.com":
                 recorded.append(headers["Authorization"])
-            return request(host, method, path, body, headers)
+            return request(host, method, path, body, headers, timeout=timeout)
         client._request = capture_request
         client.translate([], "cache")
         self.assertEqual(recorded, ["Bearer selected-synthetic"])

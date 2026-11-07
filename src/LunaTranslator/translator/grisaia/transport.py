@@ -152,7 +152,7 @@ class ResponsesClient:
         self._mutex = threading.Lock()
         self._context = ssl.create_default_context()
 
-    def _connection(self, target):
+    def _connection(self, target, timeout=None):
         if target not in ("api.openai.com", "ipapi.co", "ipinfo.io", "ifconfig.co"):
             raise TranslationError("configuration")
         cfg = self.config
@@ -161,14 +161,15 @@ class ResponsesClient:
             token = base64.b64encode((cfg.proxy_username + ":" + cfg.proxy_password).encode("utf-8")).decode("ascii")
             headers["Proxy-Authorization"] = "Basic " + token
         connection = http.client.HTTPSConnection(cfg.proxy_host, cfg.proxy_port,
-                                                timeout=cfg.timeout, context=self._context)
+                                                timeout=cfg.timeout if timeout is None else timeout,
+                                                context=self._context)
         # HTTPSConnection connects plaintext to the configured HTTP proxy,
         # performs CONNECT, then wraps the target socket with target SNI/TLS.
         connection.set_tunnel(target, 443, headers=headers)
         return connection
 
-    def _request(self, target, method, path, body=None, headers=None):
-        connection = self._connection(target)
+    def _request(self, target, method, path, body=None, headers=None, timeout=None):
+        connection = self._connection(target, timeout=timeout)
         try:
             connection.request(method, path, body=body, headers=headers or {})
             response = connection.getresponse()
@@ -230,20 +231,23 @@ class ResponsesClient:
 
     def compact(self, messages, cache_key):
         config = replace(self.config, model="gpt-6.1-sol", reasoning_effort="high",
-                         max_output_tokens=16384)
-        return self._respond(messages, cache_key + "-summary", config)
+                         max_output_tokens=32768, timeout=max(self.config.timeout, 300))
+        return self._respond(messages, cache_key + "-context-v2", config, json_output=True)
 
-    def _respond(self, messages, cache_key, config):
+    def _respond(self, messages, cache_key, config, json_output=False):
         with self._mutex:
             self._preflight()
             started = time.monotonic()
             try:
                 key = self._read_key()
-                body = json.dumps(build_payload(messages, config, cache_key), ensure_ascii=False,
+                payload = build_payload(messages, config, cache_key)
+                if json_output:
+                    payload["text"] = {"format": {"type": "json_object"}}
+                body = json.dumps(payload, ensure_ascii=False,
                                   separators=(",", ":")).encode("utf-8")
                 status, data = self._request("api.openai.com", "POST", "/v1/responses", body,
                     {"Content-Type": "application/json", "Authorization": "Bearer " + key,
-                     "Accept": "application/json"})
+                     "Accept": "application/json"}, timeout=config.timeout)
                 if status != 200:
                     error = data.get("error")
                     code = error.get("code") if isinstance(error, dict) else None

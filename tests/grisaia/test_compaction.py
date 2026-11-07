@@ -5,9 +5,11 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "LunaTranslator"))
 from translator.grisaia import Journal, TranslationError, TranslationResult
+from translator.grisaia.prompt import merge_context
 
 
 class Client:
@@ -23,7 +25,9 @@ class Client:
         self.compactions.append(messages)
         if self.fail_compact:
             raise TranslationError("request_failed")
-        return TranslationResult("Names and unresolved references retained.", {"model": "gpt-6.1-sol"})
+        return TranslationResult(json.dumps({"reference_updates": {
+            "character": "Names and unresolved references retained."},
+            "events": "Events of the current run."}), {"model": "gpt-6.1-sol"})
 
     def translate(self, messages, key):
         self.translations.append(messages)
@@ -64,11 +68,12 @@ class CompactionTests(unittest.TestCase):
         self.assertNotIn("Current window", compact_input)
         self.assertNotIn("Queued future", compact_input)
         request = self.client.translations[-1]
-        self.assertEqual(len(request), 5)  # prompt, summary rule, boundary, summary, current
+        self.assertEqual(len(request), 45)  # context plus 20 recent original/translation pairs
         self.assertEqual(request[1]["role"], "developer")
         self.assertIn("permitted", request[1]["content"][0]["text"])
         self.assertEqual(request[-1]["content"][0]["text"], "Current window")
-        self.assertNotIn("Synthetic window", json.dumps(request))
+        self.assertNotIn('Synthetic window 0"', json.dumps(request))
+        self.assertIn("Synthetic window 99", json.dumps(request))
         self.assertEqual([self.j.entry(i) for i in ids], originals)
         self.j.close()
         self.j = Journal(self.path)
@@ -135,7 +140,88 @@ class CompactionTests(unittest.TestCase):
         self.assertEqual(len(self.client.compactions), 1)
         self.assertIn("BEGIN CURRENT RUN 1", json.dumps(self.client.compactions[0]))
         self.assertNotIn("First new run window", json.dumps(self.client.compactions[0]))
-        self.assertNotIn("Synthetic window", json.dumps(self.client.translations[-1]))
+        self.assertNotIn('Synthetic window 0"', json.dumps(self.client.translations[-1]))
+
+    def test_reference_notes_survive_omission_and_corrections_are_appended(self):
+        previous = {"reference": {"person": ["Identity unknown"], "term": ["Russian form"]},
+                    "events": "Old events"}
+        merged = json.loads(merge_context(previous, json.dumps({
+            "reference_updates": {"person": "Identity revealed: Mira"}, "events": "Later events"})))
+        self.assertEqual(merged["reference"]["term"], ["Russian form"])
+        self.assertEqual(merged["reference"]["person"], ["Identity unknown", "Identity revealed: Mira"])
+        self.assertEqual(merged["events"], "Later events")
+        repeated = json.loads(merge_context(merged, json.dumps({
+            "reference_updates": {"person": "Identity revealed: Mira"}, "events": "Latest"})))
+        self.assertEqual(repeated["reference"], merged["reference"])
+        self.assertEqual(previous["reference"]["person"], ["Identity unknown"])
+
+    def test_rebuild_uses_full_originals_without_previous_summary_and_preserves_versions(self):
+        ids = self.fill(103)
+        before = [self.j.entry(i) for i in ids]
+        result = self.j.rebuild_context(self.client)
+        self.assertEqual(result["source_windows"], 103)
+        request = json.dumps(self.client.compactions[-1])
+        self.assertIn("Synthetic window 0", request)
+        self.assertIn("Synthetic window 102", request)
+        self.assertNotIn("Names and unresolved references retained.", request)
+        self.assertEqual([self.j.entry(i) for i in ids], before)
+        self.assertEqual(self.j._db.execute("SELECT count(*) FROM context_checkpoints").fetchone()[0], 2)
+        self.j.capture("Next")
+        self.j.process_one(self.client)
+        self.assertEqual(len(self.client.compactions), 2)
+
+    def test_invalid_json_does_not_commit_and_rebuild_needs_explicit_retry(self):
+        self.fill(2)
+        original = self.client.compact
+        self.client.compact = lambda *args: TranslationResult('{"events":"missing reference_updates"}', {})
+        with self.assertRaises(TranslationError):
+            self.j.rebuild_context(self.client)
+        self.assertEqual(self.j._db.execute("SELECT count(*) FROM context_checkpoints").fetchone()[0], 0)
+        self.assertTrue(self.j.status()["paused"])
+        with self.assertRaises(TranslationError) as blocked:
+            self.j.process_one(self.client)
+        self.assertEqual(blocked.exception.code, "context_rebuild")
+        self.client.compact = original
+        with self.assertRaises(TranslationError) as caught:
+            self.j.rebuild_context(self.client)
+        self.assertEqual(caught.exception.code, "uncertain")
+        pending = self.j.capture("Queued during failed rebuild")
+        result = self.j.rebuild_context(self.client, retry=True)
+        self.assertEqual(result["source_windows"], 2)
+        self.assertNotIn("Queued during failed rebuild", json.dumps(self.client.compactions[-1]))
+        self.assertEqual(self.j.entry(pending)["state"], "pending")
+        self.assertEqual(self.j.process_one(self.client)["id"], pending)
+        self.assertEqual(len(self.client.compactions), 1)
+
+    def test_legacy_summary_is_preserved_but_upgrade_reads_original_pairs(self):
+        self.client.compact_every = 0
+        ids = self.fill(100)
+        self.j._db.execute("INSERT INTO summaries VALUES(1,?,'Legacy lossy summary','{}',1)", (ids[-1],))
+        self.j.close()
+        self.j = Journal(self.path)
+        self.client.compact_every = 100
+        self.j.capture("Next")
+        self.j.process_one(self.client)
+        request = json.dumps(self.client.compactions[0])
+        self.assertIn("Synthetic window 0", request)
+        self.assertNotIn("Legacy lossy summary", request)
+        self.assertEqual(self.j._db.execute("SELECT text FROM summaries").fetchone()[0], "Legacy lossy summary")
+
+    def test_rebuild_checkpoint_and_success_state_commit_together(self):
+        self.fill(2)
+        original = self.j._set_meta
+        def fail_commit(key, value):
+            if key == "context_rebuild_state" and value == "completed":
+                raise OSError("Synthetic failed commit")
+            original(key, value)
+        with patch.object(self.j, "_set_meta", side_effect=fail_commit):
+            with self.assertRaises(TranslationError):
+                self.j.rebuild_context(self.client)
+        self.assertEqual(self.j._db.execute("SELECT count(*) FROM context_checkpoints").fetchone()[0], 0)
+        self.assertEqual(self.j.status()["context_rebuild_state"], "failed")
+        self.j.rebuild_context(self.client, retry=True)
+        self.assertEqual(self.j.status()["context_rebuild_state"], "completed")
+        self.assertEqual(self.j._db.execute("SELECT count(*) FROM context_checkpoints").fetchone()[0], 1)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,8 @@ def main():
     mark = sub.add_parser("new-run")
     mark.add_argument("--reason", default="New playthrough / older save loaded")
     sub.add_parser("preflight")
+    rebuild = sub.add_parser("rebuild-context", help="Paid rebuild from full active-run journal; stop Luna first")
+    rebuild.add_argument("--retry", action="store_true", help="Explicitly retry an uncertain/failed rebuild")
     choose = sub.add_parser("select-model")
     choose.add_argument("model", choices=ALLOWED_MODELS)
     choose.add_argument("effort", choices=["low", "medium"])
@@ -51,6 +53,16 @@ def main():
                 print("Retry enabled." if journal.retry() else "No paused request to retry.")
             elif args.command == "new-run":
                 print("New run:", journal.new_run(args.reason))
+            elif args.command == "rebuild-context":
+                def record_egress(public):
+                    import os
+                    import time
+                    with (args.home / "egress.jsonl").open("a", encoding="utf-8") as stream:
+                        stream.write(json.dumps({"time": time.time(), **public}) + "\n")
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                client = ResponsesClient(ClientConfig.from_file(path), on_egress=record_egress)
+                print(json.dumps(journal.rebuild_context(client, retry=args.retry)))
             else:
                 print(json.dumps(journal.status(), ensure_ascii=False, indent=2))
 

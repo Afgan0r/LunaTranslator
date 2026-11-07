@@ -359,25 +359,59 @@ The Codex bridge is deferred to a separate phase.
 The owner requested automatic context compaction on 2026-11-07. Before translating
 the next window after 100 completed windows in a run, the worker summarizes those
 completed original/translation pairs through `gpt-6.1-sol` with `high` reasoning.
-Subsequent checkpoints merge the previous summary with the next 100 completed
+Subsequent checkpoints combine the previous context with the next 100 completed
 pairs. One captured dialogue window counts as one message for this threshold.
 The goal is to reduce repeated API context while retaining translation continuity.
 On an existing journal, the first checkpoint includes all complete hundred-window
 blocks preceding the pending head; the remaining pairs stay verbatim in context.
 
-This is an explicit textual summary through Responses, not the opaque
+This is explicit structured context through Responses, not the opaque
 [`/responses/compact` window](https://developers.openai.com/api/docs/guides/compaction)
-(accessed 2026-11-07). The summary retains names, Russian forms, voice, relevant
-events and uncertainty. Summarization can lose detail; the full originals and
-translations remain unchanged in SQLite for inspection and recovery.
+(accessed 2026-11-07). Context has two independent parts: a cumulative reference
+of names, Russian forms, voices, relationships, concrete details and open questions;
+and a chronological events summary. Reference updates are appended by subject,
+so omission by the model cannot delete an earlier note. Corrections must explicitly
+qualify earlier claims. Exact repeated notes are not appended twice. The last
+20 summarized original/translation pairs also remain verbatim, followed by all
+unsummarized pairs. Each run has its own reference and events.
 
-Summaries are journal checkpoints, committed before the next translation. A
+There is no word-count target or fixed context size. The former 1200-word cap
+is removed. Each context request has a 32,768-token output ceiling including
+reasoning and a socket timeout of at least 300 seconds, leaving translation
+timeouts unchanged. An incomplete response is rejected and requires manual recovery,
+never accepted as a truncated checkpoint. Growing context can still reach the
+model's input limit and pause; neither the reference nor journal is silently pruned.
+Events summarization can still lose detail; originals and translations remain
+unchanged in SQLite for inspection and recovery.
+
+Contexts are append-only journal checkpoints, committed before the next
+translation. A
 restart or failed translation reuses a committed checkpoint. A failed or interrupted
 summary pauses the FIFO head and requires manual Retry; it is never retried
 automatically. Each run is summarized separately; archived summaries stay before
 their run boundary and cannot inform the current run. Future queued windows are
 excluded. The immutable translation prompt and selected translation model/effort
 are unchanged. Summary usage and estimated cost are stored with each checkpoint.
+
+The original `summaries` table is retained. Its rows are copied idempotently into
+versioned `context_checkpoints`; an automatic upgrade rebuilds structured context
+from original pairs rather than the legacy lossy text. Latest checkpoints are
+selected by covered event ID and then revision ID, preserving older versions.
+
+For an explicit full rebuild, stop Luna and run the private control:
+
+```text
+python -X utf8 tools/grisaia_control.py --home <private-home> rebuild-context
+```
+
+This is a paid API operation requiring explicit user authority. An initial rebuild
+requires an idle queue and exclusive worker ownership, reads every pair in the active
+run, and never reads an earlier summary as model context. Checkpoint insertion and
+successful rebuild state commit together. An interrupted or failed rebuild blocks
+automatic translation until an explicit `rebuild-context --retry`; do not blindly
+repeat an uncertain operation. Retry uses the persisted original source boundary,
+so later queued captures do not block recovery or enter its context. Other runs
+and all original event rows are preserved.
 
 For an older compatible installation, `tools/deploy_grisaia.py --core-only`
 updates only manifest-managed Grisaia Python modules, verifies all selected
@@ -393,10 +427,36 @@ Python compilation and independent code/history reviews. This covers
 on the next change. Durable history, manual recovery, egress and deployment
 integrity requirements remain in force.
 
+The owner renewed the same task-specific coverage exception for this context
+redesign and full-journal rebuild, including `tools/grisaia_control.py`. The
+alternative evidence remains regression tests, compilation, independent reviews
+and installed verification. No full-module coverage claim is made.
+
 Installation verification passed on 2026-11-07: 52 synthetic regression tests,
 Python compilation, Markdownlint, whitespace checks and independent code/history
 reviews. A real installed-transport request summarized only synthetic dialogue
 using Sol 6.1 / high. All 775 production event rows (773 completed translations
 and two run markers) retained their exact values. Manifest digests matched, and
-the installed Luna restarted with no pending head. The first production summary
-is deferred until the next captured window; its translation quality is unmeasured.
+the installed Luna restarted with no pending head. At that checkpoint, the first
+production summary was deferred until the next captured window; its translation
+quality was unmeasured.
+
+The context redesign passed 57 regression tests, compilation, Markdownlint,
+whitespace checks and independent code/history reviews. A full rebuild from
+969 completed pairs in active run 2 produced 18 cumulative reference subjects
+(22,871 serialized characters) and a separate events narrative (12,432 characters).
+The request used Sol 6.1 / high and completed in 170 seconds on the owner's one
+explicitly authorized retry. The first attempt returned no result; its cause and
+billing outcome remain unconfirmed. All 985 completed translation events and both
+run markers retained their exact values. Old summaries remain available.
+
+The installed Luna restarted unpaused with no pending head. An isolated journal
+copy verified that the next request uses the rebuilt context plus the last 20
+raw current-run pairs. This verifies reconstruction, not exhaustive factual
+completeness of every model-generated note. Very large future full rebuilds can
+still exceed the input limit; retry alone cannot resolve an oversized request.
+
+The verified pre-rebuild backup is logical artifact `grisaia-context-v2-rebuild-v1`;
+its machine-local locator is `<private-home>/checkpoints/context-v2/locator.json`.
+The locator records the backup digest, original event digest, deployed core
+digests and completed rebuild state. Private journal payloads stay outside Git.

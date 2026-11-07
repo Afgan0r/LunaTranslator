@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from .prompt import (COMPACTION_PROMPT, DEVELOPER_PROMPT, run_message,
-                     summary_message, text_message)
+                     merge_context, summary_message, text_message)
 
 
 class TranslationError(Exception):
@@ -27,6 +27,7 @@ class TranslationError(Exception):
             "uncertain": "Interrupted request may have been charged; explicit retry required.",
             "worker_busy": "Another translation worker owns this journal.",
             "paused": "Translation is paused; explicit retry required.",
+            "context_rebuild": "Context rebuild stopped; stop Luna and use rebuild-context --retry.",
         }.get(code, "Translation failed; explicit retry required."))
 
 
@@ -86,6 +87,15 @@ class Journal:
                     run_id INTEGER NOT NULL, through_id INTEGER NOT NULL,
                     text TEXT NOT NULL, metadata TEXT NOT NULL, created REAL NOT NULL,
                     PRIMARY KEY(run_id, through_id))""")
+                self._db.execute("""CREATE TABLE IF NOT EXISTS context_checkpoints (
+                    id INTEGER PRIMARY KEY, run_id INTEGER NOT NULL,
+                    through_id INTEGER NOT NULL, text TEXT NOT NULL,
+                    metadata TEXT NOT NULL, created REAL NOT NULL,
+                    format_version INTEGER NOT NULL,
+                    UNIQUE(run_id,through_id,created))""")
+                self._db.execute("""INSERT OR IGNORE INTO context_checkpoints
+                    (run_id,through_id,text,metadata,created,format_version)
+                    SELECT run_id,through_id,text,metadata,created,1 FROM summaries""")
                 old = self._get_meta("prompt")
                 if old is not None and old != prompt:
                     raise ValueError("Journal prompt is immutable; use its original prompt.")
@@ -167,9 +177,11 @@ class Journal:
         with self._mutex:
             counts = {r[0]: r[1] for r in self._db.execute("SELECT state,count(*) FROM events WHERE kind='capture' GROUP BY state")}
             head = self._db.execute("SELECT id,state,error_code FROM events WHERE kind='capture' AND state!='completed' ORDER BY id LIMIT 1").fetchone()
+            rebuild = self._get_meta("context_rebuild_state")
             return {"active_run": int(self._get_meta("active_run")),
                     "counts": counts, "head": dict(head) if head else None,
-                    "paused": bool(head and head["state"] in ("failed", "uncertain", "inflight")),
+                    "paused": rebuild in ("inflight", "failed") or bool(head and head["state"] in ("failed", "uncertain", "inflight")),
+                    "context_rebuild_state": rebuild,
                     "cache_key": self.cache_key}
 
     def messages_for(self, entry_id):
@@ -180,7 +192,13 @@ class Journal:
             rows = self._db.execute("SELECT * FROM events WHERE id<=? ORDER BY id", (entry_id,)).fetchall()
             messages = [text_message("developer", self.prompt, breakpoint=True)]
             summaries = {r["run_id"]: r for r in self._db.execute(
-                "SELECT * FROM summaries WHERE through_id<? ORDER BY through_id", (entry_id,))}
+                "SELECT * FROM context_checkpoints WHERE through_id<? ORDER BY through_id,id", (entry_id,))}
+            recent = {}
+            for row in rows:
+                summary = summaries.get(row["run_id"])
+                if row["kind"] == "capture" and summary and row["id"] <= summary["through_id"]:
+                    recent.setdefault(row["run_id"], []).append(row["id"])
+            retained = {i for ids in recent.values() for i in ids[-20:]}
             if summaries:
                 messages.append(text_message("developer", "Run-specific reference summaries "
                     "below represent preceding original/translation pairs and are permitted "
@@ -194,7 +212,7 @@ class Journal:
                         messages.append(summary_message(row["run_id"], summary["text"]))
                 else:
                     summary = summaries.get(row["run_id"])
-                    if summary and row["id"] <= summary["through_id"]:
+                    if summary and row["id"] <= summary["through_id"] and row["id"] not in retained:
                         continue
                     if row["id"] != entry_id and row["state"] != "completed":
                         raise TranslationError("paused")
@@ -211,16 +229,17 @@ class Journal:
         with self._mutex:
             runs = [r[0] for r in self._db.execute("""SELECT e.run_id FROM events e
                 WHERE e.kind='capture' AND e.id<? AND e.id>COALESCE(
-                    (SELECT MAX(s.through_id) FROM summaries s WHERE s.run_id=e.run_id),0)
+                    (SELECT MAX(s.through_id) FROM context_checkpoints s
+                     WHERE s.run_id=e.run_id AND s.format_version=2),0)
                 GROUP BY e.run_id HAVING count(*)>=? ORDER BY e.run_id""", (entry_id, interval))]
         for run in runs:
             self._compact_run(run, entry_id, client, interval)
 
-    def _compact_run(self, run, entry_id, client, interval):
+    def _compact_run(self, run, entry_id, client, interval, rebuild=False):
         with self._mutex:
-            previous = self._db.execute(
-                "SELECT * FROM summaries WHERE run_id=? ORDER BY through_id DESC LIMIT 1",
-                (run,)).fetchone()
+            previous = None if rebuild else self._db.execute(
+                "SELECT * FROM context_checkpoints WHERE run_id=? AND format_version=2 "
+                "ORDER BY through_id DESC,id DESC LIMIT 1", (run,)).fetchone()
             after = previous["through_id"] if previous else 0
             rows = self._db.execute("""SELECT * FROM events WHERE kind='capture'
                 AND run_id=? AND id>? AND id<? ORDER BY id""", (run, after, entry_id)).fetchall()
@@ -237,12 +256,56 @@ class Journal:
                 messages.extend((text_message("user", row["original"]),
                                  text_message("assistant", row["translation"])))
         result = client.compact(messages, self.cache_key)
-        if not isinstance(result.text, str) or not result.text.strip():
-            raise TranslationError("empty_output")
-        metadata = json.dumps(result.metadata, ensure_ascii=False, separators=(",", ":"))
+        try:
+            text = merge_context(json.loads(previous["text"]) if previous else {}, result.text)
+        except (TypeError, ValueError):
+            raise TranslationError("invalid_response") from None
+        metadata = json.dumps({**result.metadata, "rebuild": rebuild,
+                              "source_windows": count, "source_first_id": rows[0]["id"],
+                              "previous_checkpoint_id": previous["id"] if previous else None},
+                              ensure_ascii=False, separators=(",", ":"))
+        checkpoint = {"run_id": run, "through_id": rows[-1]["id"], "source_windows": count,
+                      "reference_subjects": len(json.loads(text)["reference"])}
         with self._transaction():
-            self._db.execute("INSERT INTO summaries VALUES(?,?,?,?,?)",
-                             (run, rows[-1]["id"], result.text, metadata, time.time()))
+            self._db.execute("""INSERT INTO context_checkpoints
+                (run_id,through_id,text,metadata,created,format_version) VALUES(?,?,?,?,?,2)""",
+                (run, rows[-1]["id"], text, metadata, time.time()))
+            if rebuild:
+                self._set_meta("context_rebuild_state", "completed")
+        return checkpoint
+
+    def rebuild_context(self, client, retry=False):
+        """Explicit paid rebuild from original pairs; never use old summaries."""
+        with self._processing:
+            self._acquire_worker()
+            with self._transaction():
+                status = self.status()
+                state = self._get_meta("context_rebuild_state")
+                if state in ("inflight", "failed") and not retry:
+                    raise TranslationError("uncertain")
+                if state in ("inflight", "failed"):
+                    target = json.loads(self._get_meta("context_rebuild_target"))
+                    run, end = target["run_id"], target["end"]
+                else:
+                    if status["head"]:
+                        raise TranslationError("paused")
+                    run = status["active_run"]
+                    end = self._db.execute("SELECT max(id) FROM events").fetchone()[0] + 1
+                    self._set_meta("context_rebuild_target", json.dumps({"run_id": run, "end": end}))
+                self._set_meta("context_rebuild_state", "inflight")
+            try:
+                result = self._compact_run(run, end, client, 1, rebuild=True)
+                if result is None:
+                    with self._transaction():
+                        self._set_meta("context_rebuild_state", "completed")
+                return result
+            except Exception as exc:
+                with self._transaction():
+                    self._set_meta("context_rebuild_state", "failed")
+                allowed = {"context_overflow", "incomplete", "refusal", "empty_output",
+                           "egress_failed", "configuration", "request_failed", "invalid_response"}
+                code = exc.code if isinstance(exc, TranslationError) and exc.code in allowed else "request_failed"
+                raise TranslationError(code) from None
 
     def retry(self):
         with self._transaction():
@@ -275,6 +338,8 @@ class Journal:
         with self._processing:
             self._acquire_worker()
             with self._transaction():
+                if self._get_meta("context_rebuild_state") in ("inflight", "failed"):
+                    raise TranslationError("context_rebuild")
                 head = self._db.execute("SELECT id,state,error_code FROM events WHERE kind='capture' AND state!='completed' ORDER BY id LIMIT 1").fetchone()
                 if head is None:
                     return None
