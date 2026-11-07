@@ -169,7 +169,7 @@ in-flight request becomes uncertain and needs manual retry, because it may
 already have been billed. A stopped worker cannot replace a newer overlay.
 
 Every request contains the immutable developer instructions, run markers,
-all preceding original/translation message pairs, and the current original.
+the retained context described below, and the current original.
 Prior assistant translations use the documented plain-text assistant-message
 form in [conversation state](https://developers.openai.com/api/docs/guides/conversation-state)
 (accessed 2026-11-06), preserving the text and role without input-only blocks.
@@ -181,7 +181,7 @@ prior runs treated as archived context rather than plot knowledge.
 removing history. Use it before advancing after a replay or loading an older
 save. `Retry.cmd` releases the failed head only; subsequent captured windows
 remain queued. `Status.cmd` shows queue counts without corpus or credentials.
-Context overflow pauses with an explicit message; no history is shortened.
+Context overflow pauses with an explicit message; journal history is never deleted.
 Free-credit exhaustion does not trigger a model or provider change. Paid
 requests continue according to the account's billing settings.
 
@@ -353,3 +353,50 @@ The existing 727 completed translations were preserved, and the model check did
 not write synthetic dialogue into the game journal.
 
 The Codex bridge is deferred to a separate phase.
+
+## Automatic context summaries
+
+The owner requested automatic context compaction on 2026-11-07. Before translating
+the next window after 100 completed windows in a run, the worker summarizes those
+completed original/translation pairs through `gpt-6.1-sol` with `high` reasoning.
+Subsequent checkpoints merge the previous summary with the next 100 completed
+pairs. One captured dialogue window counts as one message for this threshold.
+The goal is to reduce repeated API context while retaining translation continuity.
+On an existing journal, the first checkpoint includes all complete hundred-window
+blocks preceding the pending head; the remaining pairs stay verbatim in context.
+
+This is an explicit textual summary through Responses, not the opaque
+[`/responses/compact` window](https://developers.openai.com/api/docs/guides/compaction)
+(accessed 2026-11-07). The summary retains names, Russian forms, voice, relevant
+events and uncertainty. Summarization can lose detail; the full originals and
+translations remain unchanged in SQLite for inspection and recovery.
+
+Summaries are journal checkpoints, committed before the next translation. A
+restart or failed translation reuses a committed checkpoint. A failed or interrupted
+summary pauses the FIFO head and requires manual Retry; it is never retried
+automatically. Each run is summarized separately; archived summaries stay before
+their run boundary and cannot inform the current run. Future queued windows are
+excluded. The immutable translation prompt and selected translation model/effort
+are unchanged. Summary usage and estimated cost are stored with each checkpoint.
+
+For an older compatible installation, `tools/deploy_grisaia.py --core-only`
+updates only manifest-managed Grisaia Python modules, verifies all selected
+installed digests before copying, and preserves bridges, capture settings and
+native binaries. Stop Luna before deploying and restart it afterwards.
+
+For this task only, the owner approved replacing the full-module 100% coverage
+requirement with focused synthetic regression tests, the complete existing suite,
+Python compilation and independent code/history reviews. This covers
+`src/LunaTranslator/translator/grisaia/{engine,prompt,transport}.py`,
+`tests/grisaia/{test_compaction,test_transport,test_deploy_grisaia}.py` and
+`tools/deploy_grisaia.py`. Coverage is not measured; reconsider this exception
+on the next change. Durable history, manual recovery, egress and deployment
+integrity requirements remain in force.
+
+Installation verification passed on 2026-11-07: 52 synthetic regression tests,
+Python compilation, Markdownlint, whitespace checks and independent code/history
+reviews. A real installed-transport request summarized only synthetic dialogue
+using Sol 6.1 / high. All 775 production event rows (773 completed translations
+and two run markers) retained their exact values. Manifest digests matched, and
+the installed Luna restarted with no pending head. The first production summary
+is deferred until the next captured window; its translation quality is unmeasured.

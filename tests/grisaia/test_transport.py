@@ -70,6 +70,21 @@ class TransportTests(unittest.TestCase):
             client.translate([], "key")
             self.assertEqual(client.calls[0][0], "ipapi.co")
 
+    def test_summary_uses_sol_high_without_changing_translation_config(self):
+        response = completed("Context summary")
+        response["model"] = "gpt-6.1-sol"
+        client = ScriptedClient(self.config, [self.geo, (200, response), (200, completed())])
+        client.compact([{"role": "user", "content": "Synthetic history"}], "key")
+        client.translate([{"role": "user", "content": "Next"}], "key")
+        compact = json.loads(client.calls[1][3])
+        normal = json.loads(client.calls[2][3])
+        self.assertEqual(compact["model"], "gpt-6.1-sol")
+        self.assertEqual(compact["reasoning"], {"effort": "high"})
+        self.assertEqual(compact["prompt_cache_key"], "key-summary")
+        self.assertEqual(normal["model"], self.config.model)
+        self.assertEqual(normal["reasoning"], {"effort": "low"})
+        self.assertEqual(client.compact_every, 100)
+
     def test_sol_low_translation_payload_and_cost(self):
         config = dataclasses.replace(self.config, model="gpt-6.1-sol", reasoning_effort="low")
         response = completed()

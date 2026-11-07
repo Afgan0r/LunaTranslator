@@ -14,6 +14,31 @@ import deploy_grisaia
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_core_only_preserves_bridges_settings_and_refuses_modified_modules(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder) / "private"
+            game = Path(folder) / "game"
+            runtime = home / "runtime/LunaTranslator_x64"
+            runtime.mkdir(parents=True)
+            (runtime / "LunaTranslator.exe").write_bytes(b"synthetic runtime")
+            (home / "settings.json").write_text(json.dumps({"hook_code": "auto:GrisaiaWindows"}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                deploy_grisaia.deploy(home, game)
+            bridge = runtime / "LunaTranslator/main.py"
+            bridge.write_text("compatible old runtime bridge")
+            settings = (home / "settings.json").read_bytes()
+            with contextlib.redirect_stdout(io.StringIO()):
+                deploy_grisaia.deploy(home, game, core_only=True)
+            self.assertEqual(bridge.read_text(), "compatible old runtime bridge")
+            self.assertEqual((home / "settings.json").read_bytes(), settings)
+            core = runtime / "LunaTranslator/translator/grisaia/transport.py"
+            core.write_text("independent change")
+            manifest = (home / "runtime-manifest.json").read_bytes()
+            with self.assertRaises(ValueError):
+                deploy_grisaia.deploy(home, game, core_only=True)
+            self.assertEqual(core.read_text(), "independent change")
+            self.assertEqual((home / "runtime-manifest.json").read_bytes(), manifest)
+
     def test_redeployment_preserves_automatic_capture_without_inserting_sentinel(self):
         for protocol, hook, expected in (
             ("grisaia-windows-v1", "auto:GrisaiaWindows", []),

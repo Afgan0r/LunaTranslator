@@ -53,7 +53,9 @@ def install_tls(runtime, archive, manifest):
                               "archive_sha256": PYTHON_TLS_SHA256, "files": records}
 
 
-def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None):
+def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None, core_only=False):
+    if core_only and any((python_embed, native_hook, launcher_dir)):
+        raise ValueError("Core-only deployment cannot include runtime or native updates.")
     if home.is_relative_to(REPO):
         raise ValueError("Runtime, configuration and journals must live outside Git.")
     runtime = home / "runtime" / "LunaTranslator_x64"
@@ -66,6 +68,9 @@ def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None):
     files.extend((path, code / "translator/grisaia" / path.name)
                  for path in (REPO / "src/LunaTranslator/translator/grisaia").glob("*.py"))
     files.append((REPO / "extensions/grisaia/selfbuild.py", user / "selfbuild.py"))
+    if core_only:
+        files = [(source, target) for source, target in files
+                 if source.parent == REPO / "src/LunaTranslator/translator/grisaia"]
     if native_hook:
         native_hook = native_hook.resolve()
         if native_hook.is_relative_to(REPO) or not native_hook.is_file():
@@ -86,6 +91,12 @@ def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None):
             files.append((source, runtime / name))
     manifest_path = home / "runtime-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {"schema": 1, "files": {}}
+    if core_only:
+        # Preflight the entire selection before copying any core module.
+        for _, target in files:
+            record = manifest["files"].get(str(target.relative_to(runtime)))
+            if record is None or not target.is_file() or digest(target) != record["installed_sha256"]:
+                raise ValueError("Core-only update requires an unchanged manifest-managed installation.")
     if python_embed:
         install_tls(runtime, python_embed, manifest)
         save_json(manifest_path, manifest)
@@ -110,6 +121,10 @@ def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None):
         if digest(target) != record["installed_sha256"]:
             raise ValueError("Runtime deployment digest mismatch.")
         save_json(manifest_path, manifest)
+
+    if core_only:
+        print("Updated manifest-managed Grisaia core only.")
+        return
 
     config_path = user / "config.json"
     config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else json.loads((REPO / "src/LunaTranslator/defaultconfig/config.json").read_text(encoding="utf-8"))
@@ -172,8 +187,11 @@ def main():
                         help="Private matching 32-bit LunaHook DLL; close Luna and the game first")
     parser.add_argument("--launcher-dir", type=Path,
                         help="Private x64 local launcher build directory")
+    parser.add_argument("--core-only", action="store_true",
+                        help="Update only the managed Python core; preserve existing runtime bridges/settings")
     args = parser.parse_args()
-    deploy(args.home.resolve(), args.game_dir.resolve(), args.python_embed, args.native_hook, args.launcher_dir)
+    deploy(args.home.resolve(), args.game_dir.resolve(), args.python_embed, args.native_hook,
+           args.launcher_dir, args.core_only)
 
 
 if __name__ == "__main__":

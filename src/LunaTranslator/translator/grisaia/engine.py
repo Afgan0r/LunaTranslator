@@ -13,7 +13,8 @@ import time
 import uuid
 from pathlib import Path
 
-from .prompt import DEVELOPER_PROMPT, run_message, text_message
+from .prompt import (COMPACTION_PROMPT, DEVELOPER_PROMPT, run_message,
+                     summary_message, text_message)
 
 
 class TranslationError(Exception):
@@ -81,6 +82,10 @@ class Journal:
                     metadata TEXT, created REAL NOT NULL, started REAL, completed REAL,
                     attempts INTEGER NOT NULL DEFAULT 0)""")
                 self._db.execute("CREATE INDEX IF NOT EXISTS events_state ON events(kind, state, id)")
+                self._db.execute("""CREATE TABLE IF NOT EXISTS summaries (
+                    run_id INTEGER NOT NULL, through_id INTEGER NOT NULL,
+                    text TEXT NOT NULL, metadata TEXT NOT NULL, created REAL NOT NULL,
+                    PRIMARY KEY(run_id, through_id))""")
                 old = self._get_meta("prompt")
                 if old is not None and old != prompt:
                     raise ValueError("Journal prompt is immutable; use its original prompt.")
@@ -174,16 +179,70 @@ class Journal:
                 raise ValueError("Expected capture event.")
             rows = self._db.execute("SELECT * FROM events WHERE id<=? ORDER BY id", (entry_id,)).fetchall()
             messages = [text_message("developer", self.prompt, breakpoint=True)]
+            summaries = {r["run_id"]: r for r in self._db.execute(
+                "SELECT * FROM summaries WHERE through_id<? ORDER BY through_id", (entry_id,))}
+            if summaries:
+                messages.append(text_message("developer", "Run-specific reference summaries "
+                    "below represent preceding original/translation pairs and are permitted "
+                    "translation context. Apply the same uncertainty and archived-run "
+                    "restrictions to them. Translate only the final dialogue window."))
             for row in rows:
                 if row["kind"] == "run":
                     messages.append(run_message(row["run_id"]))
+                    summary = summaries.get(row["run_id"])
+                    if summary:
+                        messages.append(summary_message(row["run_id"], summary["text"]))
                 else:
+                    summary = summaries.get(row["run_id"])
+                    if summary and row["id"] <= summary["through_id"]:
+                        continue
                     if row["id"] != entry_id and row["state"] != "completed":
                         raise TranslationError("paused")
                     messages.append(text_message("user", row["original"]))
                     if row["id"] != entry_id:
                         messages.append(text_message("assistant", row["translation"]))
             return messages
+
+    def _compact_for(self, entry_id, client):
+        # The worker owns this operation; captures/control remain free during HTTP.
+        interval = getattr(client, "compact_every", 0)
+        if not interval:
+            return
+        with self._mutex:
+            runs = [r[0] for r in self._db.execute("""SELECT e.run_id FROM events e
+                WHERE e.kind='capture' AND e.id<? AND e.id>COALESCE(
+                    (SELECT MAX(s.through_id) FROM summaries s WHERE s.run_id=e.run_id),0)
+                GROUP BY e.run_id HAVING count(*)>=? ORDER BY e.run_id""", (entry_id, interval))]
+        for run in runs:
+            self._compact_run(run, entry_id, client, interval)
+
+    def _compact_run(self, run, entry_id, client, interval):
+        with self._mutex:
+            previous = self._db.execute(
+                "SELECT * FROM summaries WHERE run_id=? ORDER BY through_id DESC LIMIT 1",
+                (run,)).fetchone()
+            after = previous["through_id"] if previous else 0
+            rows = self._db.execute("""SELECT * FROM events WHERE kind='capture'
+                AND run_id=? AND id>? AND id<? ORDER BY id""", (run, after, entry_id)).fetchall()
+            count = len(rows) // interval * interval
+            if not count:
+                return
+            rows = rows[:count]
+            if any(r["state"] != "completed" for r in rows):
+                raise TranslationError("paused")
+            messages = [text_message("developer", COMPACTION_PROMPT), run_message(run)]
+            if previous:
+                messages.append(summary_message(run, previous["text"]))
+            for row in rows:
+                messages.extend((text_message("user", row["original"]),
+                                 text_message("assistant", row["translation"])))
+        result = client.compact(messages, self.cache_key)
+        if not isinstance(result.text, str) or not result.text.strip():
+            raise TranslationError("empty_output")
+        metadata = json.dumps(result.metadata, ensure_ascii=False, separators=(",", ":"))
+        with self._transaction():
+            self._db.execute("INSERT INTO summaries VALUES(?,?,?,?,?)",
+                             (run, rows[-1]["id"], result.text, metadata, time.time()))
 
     def retry(self):
         with self._transaction():
@@ -222,9 +281,10 @@ class Journal:
                 if head["state"] != "pending":
                     raise TranslationError(head["error_code"] or "paused")
                 entry_id = head["id"]
-                messages = self.messages_for(entry_id)
                 self._db.execute("UPDATE events SET state='inflight',started=?,attempts=attempts+1 WHERE id=?", (time.time(), entry_id))
             try:
+                self._compact_for(entry_id, client)
+                messages = self.messages_for(entry_id)
                 result = client.translate(messages, self.cache_key)
                 if not isinstance(result.text, str) or not result.text.strip():
                     raise TranslationError("empty_output")

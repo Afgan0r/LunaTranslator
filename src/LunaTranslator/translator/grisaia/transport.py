@@ -12,7 +12,7 @@ import json
 import ssl
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .engine import TranslationError
@@ -58,8 +58,8 @@ class ClientConfig:
     def validate(self):
         if self.model not in ALLOWED_MODELS:
             raise TranslationError("configuration", "Choose a supported translation model before translating.")
-        if self.reasoning_effort not in ("low", "medium"):
-            raise TranslationError("configuration", "Reasoning effort must be low or medium.")
+        if self.reasoning_effort not in ("low", "medium", "high"):
+            raise TranslationError("configuration", "Reasoning effort must be low, medium or high.")
         if (not isinstance(self.proxy_host, str) or not self.proxy_host or
                 any(c in self.proxy_host for c in "\r\n/ @") or
                 not isinstance(self.proxy_port, int) or isinstance(self.proxy_port, bool) or
@@ -142,6 +142,8 @@ def estimate_cost(model, usage):
 
 
 class ResponsesClient:
+    compact_every = 100
+
     def __init__(self, config, on_egress=None):
         config.validate()
         self.config = config
@@ -224,12 +226,20 @@ class ResponsesClient:
             raise TranslationError("configuration", "Selected API credential is unavailable.") from None
 
     def translate(self, messages, cache_key):
+        return self._respond(messages, cache_key, self.config)
+
+    def compact(self, messages, cache_key):
+        config = replace(self.config, model="gpt-6.1-sol", reasoning_effort="high",
+                         max_output_tokens=16384)
+        return self._respond(messages, cache_key + "-summary", config)
+
+    def _respond(self, messages, cache_key, config):
         with self._mutex:
             self._preflight()
             started = time.monotonic()
             try:
                 key = self._read_key()
-                body = json.dumps(build_payload(messages, self.config, cache_key), ensure_ascii=False,
+                body = json.dumps(build_payload(messages, config, cache_key), ensure_ascii=False,
                                   separators=(",", ":")).encode("utf-8")
                 status, data = self._request("api.openai.com", "POST", "/v1/responses", body,
                     {"Content-Type": "application/json", "Authorization": "Bearer " + key,
@@ -240,7 +250,7 @@ class ResponsesClient:
                     if code in ("context_length_exceeded", "context_window_exceeded"):
                         raise TranslationError("context_overflow")
                     raise TranslationError("request_failed")
-                return parse_response(data, self.config.model, time.monotonic() - started)
+                return parse_response(data, config.model, time.monotonic() - started)
             except TranslationError:
                 raise
             except Exception:
