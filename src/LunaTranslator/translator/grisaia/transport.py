@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .engine import TranslationError
 
-ALLOWED_MODELS = ("gpt-6-astra", "gpt-5.6-terra")
+ALLOWED_MODELS = ("gpt-6-astra", "gpt-5.6-terra", "gpt-6.1-sol")
 # Deliberately conservative subset of the official supported-country list.
 SUPPORTED_COUNTRIES = frozenset(("PL", "DE", "NL", "FI", "US", "GB", "UA"))
 
@@ -57,7 +57,7 @@ class ClientConfig:
 
     def validate(self):
         if self.model not in ALLOWED_MODELS:
-            raise TranslationError("configuration", "Choose gpt-6-astra or gpt-5.6-terra before translating.")
+            raise TranslationError("configuration", "Choose a supported translation model before translating.")
         if self.reasoning_effort not in ("low", "medium"):
             raise TranslationError("configuration", "Reasoning effort must be low or medium.")
         if (not isinstance(self.proxy_host, str) or not self.proxy_host or
@@ -122,7 +122,8 @@ def estimate_cost(model, usage):
     Cache writes replace the normal input charge for those tokens. Missing
     counters remain explicit; their absence makes the estimate provisional.
     """
-    rates = {"gpt-6-astra": (10, 1, 12.5, 50), "gpt-5.6-terra": (2, .2, 2.5, 12)}
+    rates = {"gpt-6-astra": (10, 1, 12.5, 50), "gpt-5.6-terra": (2, .2, 2.5, 12),
+             "gpt-6.1-sol": (2, .1, 2.5, 10)}
     if model not in rates:
         raise ValueError("Unsupported pricing model.")
     missing = [name for name in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens") if usage.get(name) is None]

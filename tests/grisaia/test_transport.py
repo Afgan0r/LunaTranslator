@@ -70,6 +70,19 @@ class TransportTests(unittest.TestCase):
             client.translate([], "key")
             self.assertEqual(client.calls[0][0], "ipapi.co")
 
+    def test_sol_low_translation_payload_and_cost(self):
+        config = dataclasses.replace(self.config, model="gpt-6.1-sol", reasoning_effort="low")
+        response = completed()
+        response["model"] = config.model
+        client = ScriptedClient(config, [self.geo, (200, response)])
+        result = client.translate([{"role": "user", "content": "Hello"}], "sol-cache")
+        payload = json.loads(client.calls[1][3])
+        self.assertEqual(payload["model"], "gpt-6.1-sol")
+        self.assertEqual(payload["reasoning"], {"effort": "low"})
+        self.assertEqual(result.text, "Привет")
+        self.assertEqual(result.metadata["model"], "gpt-6.1-sol")
+        self.assertAlmostEqual(result.metadata["cost_estimate"]["usd"], .000196)
+
     def test_json_credential_uses_only_explicitly_selected_field(self):
         self.key.write_text(json.dumps({"OPENAI_API_KEY_WITH_SHARING": "selected-synthetic",
                                        "OPENAI_API_KEY_WITHOUT_SHARING": "other-synthetic"}), encoding="utf-8")

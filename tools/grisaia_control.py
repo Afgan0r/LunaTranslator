@@ -11,7 +11,7 @@ if not (code / "translator" / "grisaia").is_dir():
     code = tool_home / "runtime" / "LunaTranslator_x64" / "LunaTranslator"
 sys.path.insert(0, str(code))
 from translator.grisaia.engine import Journal
-from translator.grisaia.transport import ClientConfig, ResponsesClient
+from translator.grisaia.transport import ALLOWED_MODELS, ClientConfig, ResponsesClient
 
 
 def main():
@@ -24,7 +24,7 @@ def main():
     mark.add_argument("--reason", default="New playthrough / older save loaded")
     sub.add_parser("preflight")
     choose = sub.add_parser("select-model")
-    choose.add_argument("model", choices=["gpt-6-astra", "gpt-5.6-terra"])
+    choose.add_argument("model", choices=ALLOWED_MODELS)
     choose.add_argument("effort", choices=["low", "medium"])
     args = parser.parse_args()
     path = args.home / "settings.json"

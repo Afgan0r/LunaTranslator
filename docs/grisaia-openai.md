@@ -326,4 +326,30 @@ full-file coverage remain unmeasured. Alternative acceptance evidence is the
 and the live capture/recovery check above. Reconsider this exception on the
 next change to these files; it is not a general coverage exemption.
 
+## Sol 6.1 selection
+
+On 2026-11-07 the owner selected `gpt-6.1-sol / low` to reduce translation
+cost after inspecting sequential examples against saved Astra translations.
+Luna remains an optional future choice, not an automatic fallback. The private
+settings file owns the active runtime selection.
+
+The transport and model-selection control now accept Sol 6.1 and estimate its
+standard token costs. The owner approved a task-specific exception to full-module
+100% measured coverage for `src/LunaTranslator/translator/grisaia/transport.py`,
+`tests/grisaia/test_transport.py`, and `tools/grisaia_control.py`. Coverage was
+not measured. Alternative evidence is the passing 45-test regression suite,
+Python compilation, independent code and historical review, and a successful
+synthetic translation through the installed transport using Sol 6.1 / low.
+Reconsider coverage when these files next change; this is not a general exemption.
+
+The installed application retains the compatible bridge files from the verified
+`lunatranslator-local-before-20261107` checkpoint, plus the updated transport.
+Deploying newer upstream bridge files into this older runtime caused a startup
+failure because its `NativeUtils` module lacked `CheckMaybeUNCFile`. Restoring
+the seven bridge files against checkpoint hashes restored startup. The manifest
+records their restored hashes. This installation is not a deployment of the
+complete current source tree; a future full deployment needs a matched runtime.
+The existing 727 completed translations were preserved, and the model check did
+not write synthetic dialogue into the game journal.
+
 The Codex bridge is deferred to a separate phase.
