@@ -71,9 +71,9 @@ class TransportTests(unittest.TestCase):
             client.translate([], "key")
             self.assertEqual(client.calls[0][0], "ipapi.co")
 
-    def test_summary_uses_sol_high_without_changing_translation_config(self):
+    def test_summary_uses_luna_high_without_changing_translation_config(self):
         response = completed("Context summary")
-        response["model"] = "gpt-6.1-sol"
+        response["model"] = "gpt-6-luna"
         client = ScriptedClient(self.config, [self.geo, (200, response), (200, completed())])
         client.compact([{"role": "user", "content": "Synthetic history"}], "key")
         self.assertEqual(client.last_timeout, 300)
@@ -81,7 +81,7 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(client.last_timeout, self.config.timeout)
         compact = json.loads(client.calls[1][3])
         normal = json.loads(client.calls[2][3])
-        self.assertEqual(compact["model"], "gpt-6.1-sol")
+        self.assertEqual(compact["model"], "gpt-6-luna")
         self.assertEqual(compact["reasoning"], {"effort": "high"})
         self.assertEqual(compact["service_tier"], "fast")
         self.assertEqual(normal["service_tier"], "default")
@@ -96,6 +96,21 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(normal["model"], self.config.model)
         self.assertEqual(normal["reasoning"], {"effort": "low"})
         self.assertEqual(client.compact_every, 100)
+
+    def test_luna_compaction_fast_cost_matches_published_rates(self):
+        usage = {"input_tokens": 1000, "cached_tokens": 400,
+                 "cache_write_tokens": 100, "output_tokens": 200}
+        cost = estimate_cost("gpt-6-luna", usage, "fast")
+        self.assertAlmostEqual(cost["usd"], .000333)
+        self.assertFalse(cost["provisional"])
+
+    def test_luna_is_accepted_only_for_internal_compaction_payload(self):
+        config = dataclasses.replace(self.config, model="gpt-6-luna", reasoning_effort="high")
+        with self.assertRaises(TranslationError):
+            config.validate()
+        with self.assertRaises(TranslationError):
+            build_payload([], config, "key")
+        self.assertEqual(build_payload([], config, "key", compaction=True)["model"], "gpt-6-luna")
 
     def test_fast_cost_uses_actual_response_tier_and_marks_missing_tier(self):
         for tier, multiplier in (("fast", 2), ("priority", 2), ("default", 1), (None, 2)):

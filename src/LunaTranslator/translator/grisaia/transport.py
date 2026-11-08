@@ -19,6 +19,7 @@ from .engine import TranslationError
 from .prompt import CONTEXT_FORMAT
 
 ALLOWED_MODELS = ("gpt-6-astra", "gpt-5.6-terra", "gpt-6.1-sol")
+COMPACTION_MODEL = "gpt-6-luna"
 # Deliberately conservative subset of the official supported-country list.
 SUPPORTED_COUNTRIES = frozenset(("PL", "DE", "NL", "FI", "US", "GB", "UA"))
 
@@ -56,8 +57,8 @@ class ClientConfig:
         except Exception:
             raise TranslationError("configuration", "Invalid external translation configuration.") from None
 
-    def validate(self):
-        if self.model not in ALLOWED_MODELS:
+    def validate(self, compaction=False):
+        if self.model not in ALLOWED_MODELS and not (compaction and self.model == COMPACTION_MODEL):
             raise TranslationError("configuration", "Choose a supported translation model before translating.")
         if self.reasoning_effort not in ("low", "medium", "high"):
             raise TranslationError("configuration", "Reasoning effort must be low, medium or high.")
@@ -96,8 +97,8 @@ class TranslationResult:
     metadata: dict
 
 
-def build_payload(messages, config, cache_key):
-    config.validate()
+def build_payload(messages, config, cache_key, compaction=False):
+    config.validate(compaction=compaction)
     return {"model": config.model, "reasoning": {"effort": config.reasoning_effort},
             "input": messages, "truncation": "disabled", "store": False,
             "max_output_tokens": config.max_output_tokens, "service_tier": "default",
@@ -124,7 +125,7 @@ def estimate_cost(model, usage, service_tier="default"):
     counters remain explicit; their absence makes the estimate provisional.
     """
     rates = {"gpt-6-astra": (10, 1, 12.5, 50), "gpt-5.6-terra": (2, .2, 2.5, 12),
-             "gpt-6.1-sol": (2, .1, 2.5, 10)}
+             "gpt-6.1-sol": (2, .1, 2.5, 10), "gpt-6-luna": (.1, .01, .125, .5)}
     if model not in rates:
         raise ValueError("Unsupported pricing model.")
     missing = [name for name in ("input_tokens", "cached_tokens", "cache_write_tokens", "output_tokens") if usage.get(name) is None]
@@ -235,7 +236,7 @@ class ResponsesClient:
         return self._respond(messages, cache_key, self.config)
 
     def compact(self, messages, cache_key):
-        config = replace(self.config, model="gpt-6.1-sol", reasoning_effort="high",
+        config = replace(self.config, model=COMPACTION_MODEL, reasoning_effort="high",
                          max_output_tokens=32768, timeout=max(self.config.timeout, 300))
         return self._respond(messages, cache_key + "-context-v2", config, json_output=True)
 
@@ -245,7 +246,7 @@ class ResponsesClient:
             started = time.monotonic()
             try:
                 key = self._read_key()
-                payload = build_payload(messages, config, cache_key)
+                payload = build_payload(messages, config, cache_key, compaction=json_output)
                 if json_output:
                     payload["text"] = {"format": CONTEXT_FORMAT}
                     payload["service_tier"] = "fast"

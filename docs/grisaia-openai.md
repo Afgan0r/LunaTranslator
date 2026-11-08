@@ -358,7 +358,7 @@ The Codex bridge is deferred to a separate phase.
 
 The owner requested automatic context compaction on 2026-11-07. Before translating
 the next window after 100 completed windows in a run, the worker summarizes those
-completed original/translation pairs through `gpt-6.1-sol` with `high` reasoning.
+completed original/translation pairs through `gpt-6-luna` with `high` reasoning.
 Subsequent checkpoints combine the previous context with the next 100 completed
 pairs. One captured dialogue window counts as one message for this threshold.
 The goal is to reduce repeated API context while retaining translation continuity.
@@ -408,13 +408,30 @@ Events summarization can still lose detail; originals and translations remain
 unchanged in SQLite for inspection and recovery.
 
 Only context compaction requests select `service_tier: "fast"`; ordinary
-translations continue to request `default`. Sol 6.1 Fast token prices are twice
-Standard ([model pricing](https://developers.openai.com/api/docs/models/gpt-6.1-sol),
+translations continue to request `default`. GPT-6 Luna Fast token prices are twice
+Standard ([model pricing](https://developers.openai.com/api/docs/models/gpt-6-luna),
 [Fast mode](https://developers.openai.com/api/docs/guides/fast-mode), accessed
-2026-11-07). Metadata records requested and actual tiers separately. Cost estimates
+2026-11-08). Metadata records requested and actual tiers separately. Cost estimates
 use the returned tier. When Fast is requested but the actual tier is missing,
-the estimate uses the requested rate and is marked provisional. A synthetic API
-check returned actual `fast`; 61 regression tests and independent reviews passed.
+the estimate uses the requested rate and is marked provisional. At the preceding
+Sol checkpoint, a synthetic API check returned actual `fast`; 61 regression tests
+and independent reviews passed.
+
+On 2026-11-08 the owner selected GPT-6 Luna / high / Fast for compaction only.
+The ordinary translation model and effort remain selected in private settings;
+the translation model picker is unchanged. Luna's Standard per-million token
+rates are $0.10 input, $0.01 cached input, $0.125 cache writes and $0.50 output;
+Fast doubles these rates ([pricing](https://developers.openai.com/api/docs/pricing),
+accessed 2026-11-08). Existing context and journal history are reused without
+rebuilding or changing earlier checkpoint metadata.
+
+The Luna change passed 63 synthetic regression tests, Python compilation,
+Markdownlint and independent code/history reviews. A real synthetic compaction
+request returned `gpt-6-luna` with actual `fast` and valid structured context.
+The manifest-managed core was installed and Luna restarted with 1792 completed
+translations unchanged and no pending head. Ordinary translation remained
+`gpt-6.1-sol / low`. Game-scale Luna compaction latency and semantic quality
+have not been benchmarked by this change.
 
 Contexts are append-only journal checkpoints, committed before the next
 translation. A
