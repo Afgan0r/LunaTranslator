@@ -31,6 +31,8 @@ class DeploymentTests(unittest.TestCase):
                 deploy_grisaia.deploy(home, game, core_only=True)
             self.assertEqual(bridge.read_text(), "compatible old runtime bridge")
             self.assertEqual((home / "settings.json").read_bytes(), settings)
+            self.assertTrue((runtime / "userconfig/adapter.py").is_file())
+            self.assertTrue((runtime / "LunaTranslator/integrations/session.py").is_file())
             core = runtime / "LunaTranslator/translator/grisaia/transport.py"
             core.write_text("independent change")
             manifest = (home / "runtime-manifest.json").read_bytes()
@@ -38,6 +40,37 @@ class DeploymentTests(unittest.TestCase):
                 deploy_grisaia.deploy(home, game, core_only=True)
             self.assertEqual(core.read_text(), "independent change")
             self.assertEqual((home / "runtime-manifest.json").read_bytes(), manifest)
+
+    def test_core_only_adds_extracted_components_but_refuses_unmanaged_collision(self):
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder) / "private"
+            runtime = home / "runtime/LunaTranslator_x64"
+            runtime.mkdir(parents=True)
+            (runtime / "LunaTranslator.exe").write_bytes(b"synthetic runtime")
+            (home / "settings.json").write_text(json.dumps({"hook_code": "auto:GrisaiaWindows"}))
+            with contextlib.redirect_stdout(io.StringIO()):
+                deploy_grisaia.deploy(home, Path(folder) / "game")
+            manifest_path = home / "runtime-manifest.json"
+            manifest = json.loads(manifest_path.read_text())
+            added = [runtime / relative for relative in manifest["files"]
+                     if "integrations" in Path(relative).parts or relative == str(Path("userconfig/adapter.py"))]
+            for target in added:
+                del manifest["files"][str(target.relative_to(runtime))]
+                target.unlink()
+            manifest_path.write_text(json.dumps(manifest))
+            collision = runtime / "userconfig/adapter.py"
+            collision.write_text("independent adapter")
+            before = manifest_path.read_bytes()
+            with self.assertRaises(ValueError):
+                deploy_grisaia.deploy(home, Path(folder) / "game", core_only=True)
+            self.assertEqual(collision.read_text(), "independent adapter")
+            self.assertEqual(manifest_path.read_bytes(), before)
+            self.assertFalse((runtime / "LunaTranslator/integrations/session.py").exists())
+            collision.unlink()
+            with contextlib.redirect_stdout(io.StringIO()):
+                deploy_grisaia.deploy(home, Path(folder) / "game", core_only=True)
+            self.assertTrue(collision.is_file())
+            self.assertTrue((runtime / "LunaTranslator/integrations/session.py").is_file())
 
     def test_redeployment_preserves_automatic_capture_without_inserting_sentinel(self):
         for protocol, hook, expected in (

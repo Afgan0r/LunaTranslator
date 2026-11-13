@@ -108,14 +108,18 @@ restriction. Structural validation and substantive review remain applicable.
 
 | Boundary | Responsibility and allowed direction |
 | --- | --- |
-| `translator/grisaia/prompt.py` | Pure message construction and archived-run semantics; no UI, persistence, or transport effects |
-| `translator/grisaia/engine.py` | Journal, ordering, history, run boundaries, duplicate policy, worker ownership and recovery; no Qt or deployment dependency |
-| `translator/grisaia/transport.py` | Configuration, guarded egress, credential access, request and response handling; may consume the engine's error contract, never UI/adapters |
-| `extensions/grisaia/selfbuild.py` | Luna/Qt adapter, packet validation, worker lifecycle and publication; consumes core and transport |
+| `integrations/prompt.py` | Pure message construction and archived-run semantics; no UI, persistence, or transport effects |
+| `integrations/engine.py` | Journal, ordering, history, run boundaries, duplicate policy, worker ownership and recovery; no Qt or deployment dependency |
+| `integrations/transport.py` | Configuration, guarded egress, credential access, request and response handling; may consume the engine's error contract, never UI/adapters |
+| `integrations/configuration.py` | Profile validation, shared defaults, overrides and isolated game-data paths |
+| `integrations/session.py` and `integrations/luna.py` | Shared worker lifecycle and Qt publication bridge; consume core, transport and game adapters |
+| `extensions/grisaia/adapter.py` | Game-specific packet validation, capture identities and diagnostic hooks |
+| `extensions/grisaia/selfbuild.py` | Legacy entrypoint; consumes the shared session and Grisaia adapter |
 | Existing Luna bridge sites | Optional integration before the ordinary queue, lifecycle forwarding and translator replacement; preserve unrelated translators |
 | `GrisaiaWindowState.h` | Pure occurrence/presentation state and packet construction, independent of Win32 and Python |
 | `GrisaiaWindows.h` and `CatSystem.cpp` | Game-specific executable/instruction guards, host-thread reads and hook attachment |
 | `tools/deploy_grisaia.py` | Canonical deployment bridge list, manifest, digests, backups and refusal of independent modifications |
+| `tools/workspace_build.py` and `tools/workspace_migrate.py` | Repository-local assembly, source/native provenance, staged activation and exact journal migration |
 | Other tools and launcher | Explicit controls, extraction, patch lifecycle or runtime startup; consume existing contracts rather than duplicate them |
 
 <!-- markdownlint-enable MD013 -->

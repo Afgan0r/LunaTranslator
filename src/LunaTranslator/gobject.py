@@ -1,7 +1,7 @@
 import platform, os, sys
 from ctypes import c_void_p
 
-thisuserconfig = "userconfig"
+thisuserconfig = os.environ.get("LUNA_USERCONFIG_HOME") or "userconfig"
 runtime_bit_64 = platform.architecture()[0] == "64bit"
 
 
@@ -31,7 +31,10 @@ def GetDllpath(_, base=None):
         return os.path.join(base, _[runtime_bit_64])
 
 
-def __getdir(name="", basedir="cache"):
+def __getdir(name="", basedir=None):
+
+    if basedir is None:
+        basedir = os.environ.get("LUNA_CACHE_HOME") or "cache"
 
     fd = os.path.dirname(name)
     fn = os.path.basename(name)

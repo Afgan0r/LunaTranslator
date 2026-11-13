@@ -430,6 +430,10 @@ class BASEOBJECT(QObject):
 
     @textsource.setter
     def textsource(self, _):
+        translator = self.translators.get("selfbuild")
+        suspend = getattr(translator, "suspend_game", None)
+        if suspend:
+            suspend()
         if _ is None:
             if self.textsource_p:
                 try:
@@ -440,6 +444,9 @@ class BASEOBJECT(QObject):
             self.hwnd = None
             self.gameuid = 0
         self.textsource_p = _
+        changed = getattr(translator, "active_game_changed", None)
+        if changed:
+            changed()
 
     @threader
     def safeloadprocessmodels(self):

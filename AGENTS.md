@@ -21,6 +21,8 @@ Read the smallest relevant source files and tests. For Grisaia capture,
 translation history, local deployment, or recovery, also read
 `docs/grisaia-openai.md`. Recheck current sources and runtime evidence before
 using historical results as proof of present behavior.
+For workspace assembly, migration or game-profile integrations, also read
+`docs/integrations.md`.
 
 ## Engineering skills
 
@@ -56,12 +58,15 @@ code, memory contracts, live systems or publication.
 
 - Python application code is in `src/LunaTranslator`; native launchers and
   libraries are in `src/NativeImpl`.
-- Grisaia's extension is in `extensions/grisaia`; its durable queue and API
-  transport are in `src/LunaTranslator/translator/grisaia`.
+- Grisaia's capture adapter is in `extensions/grisaia`; the shared queue,
+  profile runtime and API transport are in `src/LunaTranslator/integrations`.
+  `translator/grisaia` contains compatibility aliases.
 - Runtime binaries, builds, credentials, real game text, private configuration,
   translation journals, and diagnostic corpora stay outside Git.
-- Use repository deployment tools and their manifests to update the external
-  runtime. Source edits alone do not update the installed application. Preserve
+- Use repository workspace tools and their manifests to assemble `dist` from
+  source. Keep disposable builds in `build` and persistent data in `.local`,
+  all excluded from Git. Build and launch are separate operations. Source edits
+  alone do not update the installed application. Preserve
   backups and refuse to overwrite independently modified deployed files.
 - Preserve the sequential durable queue, manual retry after uncertain API
   outcomes, complete history, and existing run boundaries. Do not truncate

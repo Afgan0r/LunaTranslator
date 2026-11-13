@@ -475,6 +475,14 @@ def loadlanguage():
             languageshow = json.load(ff)
     except:
         languageshow = {}
+    if os.environ.get("LUNA_WORKSPACE_HOME"):
+        try:
+            with open(gobject.getconfig("lang/{}.json".format(_language)), "r", encoding="utf8") as ff:
+                cached = json.load(ff)
+            if isinstance(cached, dict):
+                languageshow = dict(cached, **languageshow)
+        except:
+            pass
 
 
 def __parsenottr(match: re.Match):
@@ -569,7 +577,12 @@ def saveallconfig(test=False):
     )
     safesave(errorcollect, gobject.getconfig("Magpie/config.json"), magpie_config)
     if not test:
-        safesave(errorcollect, "files/lang/{}.json".format(getlanguse()), languageshow)
+        target = (
+            gobject.getconfig("lang/{}.json".format(getlanguse()))
+            if os.environ.get("LUNA_WORKSPACE_HOME")
+            else "files/lang/{}.json".format(getlanguse())
+        )
+        safesave(errorcollect, target, languageshow)
     _is_config_saving = False
     return errorcollect
 

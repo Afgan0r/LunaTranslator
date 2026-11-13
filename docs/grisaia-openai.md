@@ -5,6 +5,12 @@ edition of *The Fruit of Grisaia*. The custom translator is installed as
 `userconfig/selfbuild.py`; runtime files, credentials, game text and journals
 stay outside Git.
 
+The repository-centered replacement uses the shared integration engine and
+game-profile dispatcher described in [Local workspace and game integrations](integrations.md).
+The external installation commands below remain available for legacy deployments
+and historical checkpoints. Workspace migration preserves their journal and
+configuration without reconstructing context or sending API requests.
+
 ## Source provenance and updates
 
 The original repository history is preserved. `upstream` points to

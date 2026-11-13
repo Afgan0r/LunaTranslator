@@ -67,10 +67,15 @@ def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None, c
     files = [(REPO / "src/LunaTranslator" / name, code / name) for name in BRIDGES]
     files.extend((path, code / "translator/grisaia" / path.name)
                  for path in (REPO / "src/LunaTranslator/translator/grisaia").glob("*.py"))
-    files.append((REPO / "extensions/grisaia/selfbuild.py", user / "selfbuild.py"))
+    files.extend((path, code / "integrations" / path.name)
+                 for path in (REPO / "src/LunaTranslator/integrations").glob("*.py"))
+    files.extend((REPO / "extensions/grisaia" / name, user / name)
+                 for name in ("selfbuild.py", "adapter.py"))
     if core_only:
         files = [(source, target) for source, target in files
-                 if source.parent == REPO / "src/LunaTranslator/translator/grisaia"]
+                 if source.parent in (REPO / "src/LunaTranslator/translator/grisaia",
+                                      REPO / "src/LunaTranslator/integrations",
+                                      REPO / "extensions/grisaia")]
     if native_hook:
         native_hook = native_hook.resolve()
         if native_hook.is_relative_to(REPO) or not native_hook.is_file():
@@ -95,7 +100,10 @@ def deploy(home, game, python_embed=None, native_hook=None, launcher_dir=None, c
         # Preflight the entire selection before copying any core module.
         for _, target in files:
             record = manifest["files"].get(str(target.relative_to(runtime)))
-            if record is None or not target.is_file() or digest(target) != record["installed_sha256"]:
+            new_component = (record is None and not target.exists() and
+                             (target.parent == code / "integrations" or target == user / "adapter.py"))
+            if not new_component and (record is None or not target.is_file() or
+                                      digest(target) != record["installed_sha256"]):
                 raise ValueError("Core-only update requires an unchanged manifest-managed installation.")
     if python_embed:
         install_tls(runtime, python_embed, manifest)

@@ -1,9 +1,20 @@
 from translator.basetranslator import basetrans
 from myutils.utils import checkmd5reloadmodule
 import gobject
+import os
 
 
 class TS(basetrans):
+    def suspend_game(self):
+        suspend = getattr(self.internal, "suspend_game", None)
+        if suspend:
+            suspend()
+
+    def active_game_changed(self):
+        changed = getattr(self.internal, "active_game_changed", None)
+        if changed:
+            changed()
+
     def stop_lossless(self):
         stop = getattr(self.internal, "stop_lossless", None)
         if stop:
@@ -16,7 +27,10 @@ class TS(basetrans):
         return bool(capture(*args)) if capture else False
 
     def mayreinit(self):
-        module = checkmd5reloadmodule(gobject.getconfig("selfbuild.py"), "selfbuild")
+        if os.environ.get("LUNA_WORKSPACE_HOME"):
+            from integrations import luna as module
+        else:
+            module = checkmd5reloadmodule(gobject.getconfig("selfbuild.py"), "selfbuild")
         if module and (module.TS != self.__lastm):
             previous = self.internal
             self.__lastm = module.TS

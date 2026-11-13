@@ -396,7 +396,14 @@ class texthook(basetext):
 
     @gameuid.setter
     def gameuid(self, gameuid):
+        translator = gobject.base.translators.get("selfbuild")
+        suspend = getattr(translator, "suspend_game", None)
+        if suspend and gameuid != self.gameuid:
+            suspend()
         gobject.base.gameuid = gameuid
+        changed = getattr(translator, "active_game_changed", None)
+        if changed:
+            changed()
 
     def start(self, hwnd, pids, gamepath, gameuid, autostart=False):
         for pid in pids:

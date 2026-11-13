@@ -73,3 +73,8 @@ hook-probe.jsonl
 opening.json
 opening-steam.json
 benchmark.json
+
+# Local workspace output and persistent private user state.
+/dist/
+/.local/
+/.local-migrate-*/

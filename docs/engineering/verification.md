@@ -92,3 +92,31 @@ Application test coverage remains a separate obligation.
 
 Use the task's existing report or chat rather than creating a duplicate report.
 The project contract and skills must remain usable from this repository alone.
+
+## Workspace redesign coverage exception
+
+On 2026-11-13 the owner approved a task-specific exception to the full-module
+100% coverage target for the repository-centered workspace and shared integration
+redesign. It covers:
+
+- `src/LunaTranslator/integrations/*.py`;
+- `extensions/grisaia/adapter.py` and `extensions/grisaia/selfbuild.py`;
+- `tools/build_native.py`, `tools/workspace.py`, `tools/workspace_build.py`,
+  `tools/workspace_migrate.py`, `tools/integration_control.py`, and
+  `tools/deploy_grisaia.py`;
+- the changed tests under `tests/grisaia` for this redesign.
+
+The accepted alternative is the complete regression suite, independent source
+and historical review, real native build, exact journal migration checks,
+assembled-application startup, and the agreed live Grisaia capture/translation
+and queue-recovery scenario. This exception does not waive any of those checks
+or protected history, credential, egress, retry or deployment requirements.
+
+The measured adapter/session/dispatcher and legacy entrypoint reached 100% of
+statements and branches. Transport and prompt reached 100%; journal engine and
+configuration remained below 100%. The five workspace/control/native tools
+measured 97.95% statements and 92.67% branches in the final dedicated run.
+The POSIX permission branch was not exercised on Windows. Test-file and
+function-level coverage are not claimed. These are partial metric results,
+not full-scope 100% coverage. Reconsider this exact exception when these modules
+next change; it is not a general exemption for future integrations.
