@@ -1,0 +1,20 @@
+[tool.ruff]
+required-version = "==0.16.4"
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "UP", "SIM", "I"]
+ignore = ["E501"] # The formatter owns wrapping.
+
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.13"
+pythonPlatform = "Windows"
+extraPaths = ["src/LunaTranslator", "tools", "extensions"]
+
+[tool.luna-engineering]
+python = ["src/LunaTranslator/integrations/**/*.py", "src/LunaTranslator/translator/grisaia/**/*.py", "extensions/**/*.py", "tools/**/*.py", "tests/**/*.py"]
+native = ["src/NativeImpl/LunaHook/LunaHook/engine32/Grisaia*.h", "tests/grisaia/native/*.cpp"]
+scripts = [".githooks/*"]
+max_lines = 500

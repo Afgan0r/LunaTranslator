@@ -143,3 +143,11 @@ a request. Real API calls and game actions require task-specific authority.
 Write repository documents in English and run Markdownlint on edited Markdown
 paths. Report code checks, build results, deployment, and observed live
 behavior as separate evidence.
+
+For affected own modules, run `python -X utf8 tools/check_engineering.py --base
+<task-base>` before committing. The canonical settings and isolated developer
+environment setup are in `docs/engineering/verification.md`; the same checker
+runs from pre-push against the server's actual outgoing base. Keep unchanged
+upstream and custom-module migration outside the task. Missing tools and failed
+applicable checks block completion; do not narrow discovery or weaken settings
+to make them pass.

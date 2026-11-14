@@ -23,12 +23,12 @@ Git marks it added or changed:
 
 - **Inherited upstream code:** preserve its structure and style. Do not refactor,
   split, reformat, or add coverage solely to meet this fork's engineering
-  standards. The 500-line cap and 100% coverage target do not apply to it,
+  standards. The custom-source 500-line cap does not apply to it,
   including code imported by an upstream merge.
 - **Fork patches in inherited files:** keep the patch small and verify its
   changed behavior and integration. A bridge, bug fix, or conflict resolution
   does not require migrating the surrounding file to the full standard.
-- **Independently authored extensions:** apply the full standard to existing
+- **Independently authored extensions:** apply this fast contract to existing
   and future custom modules when working on them, including their adapters,
   tests and tools. This includes the Grisaia core under `src/LunaTranslator`,
   `extensions/grisaia`, and custom native helpers. A copied or moved upstream
@@ -40,8 +40,8 @@ evade its own obligations. Preserve attribution and notices; inherited project
 code is not relabeled as vendor or generated code.
 
 For an upstream update, unchanged custom modules need their existing regression
-tests, not a new migration to coverage or size compliance. When a custom module
-is changed, apply the full requirements to that affected module and its relevant
+tests, not a new migration of unchanged modules. When a custom module
+is changed, apply the fast requirements to that affected module and its relevant
 tests/adapters, rather than only the edited lines. Preserve existing approved
 exceptions and their exact scope and revisit conditions. This boundary does not
 waive failed regression tests or claim that unchanged modules are compliant.
@@ -77,14 +77,16 @@ deployment-integrity, review, or applicable automated-test requirements.
 2. For a defect, state expected versus observed behavior and a causal hypothesis.
    Check it with the smallest adequate reproduction or inspection before fixing.
    Give the reviewer the hypothesis, observation, result, and remaining uncertainty.
-3. Use TDD when practical. Preserve original-defect evidence: a regression test
-   fails on the original defect and passes with the fix. Unavailable reproduction
+3. Bug fixes require TDD: run a regression test that fails on the original
+   defect before implementing the fix, then observe it pass. For other work,
+   prefer TDD where useful. Unavailable original-defect reproduction
    remains awaiting verification unless the owner approves an exact exception.
 4. Run inexpensive applicable checks before longer tests/builds. Run the
    canonical local gate before completion and push. Complete required real-host
    checks separately; a passing local gate does not replace them.
-5. Obtain independent combined code/test review and separate historical-risk
-   discovery as defined by `lunatranslator-review`. After fixes, the primary
+5. Obtain independent combined code/test review, with intermediate test and
+   historical checks only under the triggers in `lunatranslator-review`.
+   After fixes, the primary
    reviewer checks the fixes, affected behavior, dependencies, tests, and evidence.
 6. Accept only when the requested scenario works, mandatory evidence is complete
    and passing on the current result, and effects stay within the agreed risk
@@ -92,14 +94,27 @@ deployment-integrity, review, or applicable automated-test requirements.
 
 Track one active wall clock across investigation, implementation, builds, tests,
 agent work/waiting, review, and fixes; exclude waiting for the owner. At 20 minutes,
-stop new work, report results and remaining obstacles, and ask whether to reduce
-scope or continue. Wait for an explicit decision. Subtasks and agents do not reset
-the clock. Leave time to stop running operations safely.
+stop new work and report results, remaining checks, and an evidence-based delay
+analysis. Explain significant stages, waits and retries with approximate times;
+keep unknown causes explicit. Recommend a concrete next approach, its trade-offs
+and estimated additional time, considering smaller scope or existing solutions.
+Wait for an explicit owner decision before further diagnosis or implementation.
+Each continuation grants another 20 active minutes. Subtasks and agents do not
+reset the clock. Leave time to stop running operations safely.
+
+The main agent investigates, designs, integrates and owns live operations. Delegate
+only prepared independent implementation with a concrete parallel benefit after
+coordination costs. Name behavior, files, contracts, an existing pattern, complete
+instructions and checks. Implementation subagents may use at most
+`gpt-6.1-terra` / `medium`; unsuitable or unavailable delegation stays with the
+main agent or is reported blocked. Do not escalate the implementation model as
+an automatic fallback. Review routing has its own owner in the review skill.
 
 Mutation tests, fuzz campaigns, and benchmarks require a concrete owner request
-or separate approval of their need, scope, and budget. Ordinary behavioral,
-property, failure/recovery, coverage, and required integration checks retain
-their obligations. Do not run skill or memory evaluations; `AGENTS.md` owns that
+or separate approval of their need, scope, and budget. Select other test methods
+for concrete risks; necessary behavior, failure and real-boundary evidence remains
+required without prescribing property testing or artificial failure injection
+by method name. Do not run skill or memory evaluations; `AGENTS.md` owns that
 restriction. Structural validation and substantive review remain applicable.
 
 ## Responsibilities and dependencies
@@ -185,20 +200,16 @@ establish behavior. Before changing a failing expectation, determine whether the
 implementation, expectation, or agreed behavior is wrong. Review weakened/deleted
 tests, fixtures, exclusions and discovery as well as new assertions.
 
-For independently authored modules in the applicable change scope, the target
-is 100% of every applicable coverage metric over their executable code, including
-adapters, error paths, tests and scripts. Inventory files that
-tests never import, target/runtime combinations, lines/statements, functions,
-branches and other supported counters. A default coverage report is insufficient.
-Unsupported measurement requires an exact code/metric/runtime exception with
-mandatory alternative evidence; never label alternatives as measured 100%.
-The ownership and unchanged-module boundaries above determine applicability;
-they do not turn unmeasured coverage into a pass or lower this target within
-an affected independently authored module.
+Fast has no mandatory coverage percentage, universal counter inventory, or
+coverage-measurement exception process. Coverage may inform review; state exactly
+what was measured. Historical measurements and task-specific alternative checks
+remain evidence for their original tasks, not a coverage quota for future work.
+This change does not waive independently agreed live or protected-state checks.
 
-Use implementation-independent properties when meaningful input/action domains
-exist. Changes to persistent state, cancellation, repeated work or external
-systems need failure/recovery checks. When separately approved, mutation/fuzz
+Choose implementation-independent properties or failure injection when they
+provide useful evidence for the changed risks. Verify significant failure and
+recovery behavior when persistent state, cancellation, repeated work or external
+systems change. When separately approved, mutation/fuzz
 work must identify dangerous mechanisms, useful inputs, independent oracles,
 actual discovery, budgets and incomplete outcomes; fuzz preparation/build and
 execution have separate budgets. Keep reproducible synthetic failures.

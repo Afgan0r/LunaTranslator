@@ -25,7 +25,7 @@ review.
 
 Classify the task through the engineering contract's Code ownership and change
 scope before applying requirements. Keep upstream edits minimal; verify fork
-patches without migrating their surrounding files. Apply the full standard to
+patches without migrating their surrounding files. Apply the fast contract to
 affected independently authored modules, including existing ones.
 
 Apply the engineering contract's responsibilities, dependency directions,

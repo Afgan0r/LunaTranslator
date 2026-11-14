@@ -22,20 +22,32 @@ acceptance when assessing build, deployment, startup, UI and excluded live check
 
 ## Independent discovery
 
-Dispatch two read-only reviewers in fresh independent contexts: primary
-`gpt-6.1-sol` / `high`, and historical `gpt-6-luna` / `high`. Give each the
+Dispatch one independent read-only primary reviewer in a fresh context:
+`gpt-6.1-sol` / `high`. Give each applicable reviewer the
 full task, fixed base, source identity, exact applicable source/reference
 list, scope, and evidence requirements, without the other's endorsed findings.
 If the runtime cannot provide the required reviewers, report the missing
 review and withhold acceptance. The main agent owns live state and mutations.
 
-The primary reviews requirements, code, tests, contracts, and actual evidence
-against the fixed identity. The historical reviewer investigates relevant Git
+The primary reviews the whole task: requirements, code, tests, contracts,
+architecture/dependencies, performance/resource growth, diagnostics, affected
+boundaries and actual evidence against the fixed identity. Review the fast
+contract without importing additional strict gates or using a bug-only scan.
+
+Use `gpt-6.1-sol` / `low` for intermediate test review only when scenarios are
+complex, expectations are disputed, or test changes are substantial. Within
+TDD, perform that conditional review before implementing the specified behavior.
+
+Dispatch a separate `gpt-6-luna` / `high` historical reviewer only for a concrete
+question: an unexplained restriction, possible repeated defect, or behavior
+whose preservation needs history. It investigates relevant Git
 history, available pull-request discussions, and moved logic for regressions
 or lost decisions; report inaccessible history or discussions as evidence
 gaps. The primary attempts to confirm or disprove each historical candidate
 and labels it confirmed, suspected, rejected, or a gap, with evidence. A
-separate verifier or further fanout is not required by fast mode.
+separate verifier, mandatory fanout or closing saturation assignment is not
+required. Do not substitute a different model/effort for unavailable required
+review; report it incomplete. The routing in this section is canonical.
 
 ## Recheck and decide
 

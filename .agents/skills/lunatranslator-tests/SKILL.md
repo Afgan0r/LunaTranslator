@@ -16,22 +16,27 @@ host or cross-language evidence.
 Fix the comparison base and behavior under test. Derive expected outcomes from
 an independent contract, example, or property; exercise observable results,
 including meaningful boundary and failure/recovery cases. Use synthetic
-dialogue. For a defect, demonstrate the regression fails on the original
-defect and passes with the fix; if reproduction is unavailable, report
+dialogue. Bug fixes require TDD: run the regression and observe the original
+failure before implementing the fix, then observe it pass. For other work,
+prefer TDD where useful. If reproduction is unavailable, report
 awaiting verification unless an exact exception is approved. Investigate
 before changing a failing expectation. Review removed or weakened assertions,
 fixtures, exclusions, and discovery.
 
-## Measure and report
+## Verify and report
 
-Resolve the denominator through the engineering contract's Code ownership and
-change scope. Apply its full-module 100% target to affected independently
-authored modules, including tests and scripts, not whole inherited files with
-small patches. Inventory unimported files and relevant runtimes within that
-scope. An unsupported metric needs an exact code/metric/runtime exception and
-alternative evidence; never present an alternative as measured coverage.
-Preserve approved exceptions. For upstream updates, run existing regression
-tests without requiring coverage/size migration of unchanged custom modules.
+Resolve affected modules through the engineering contract's ownership scope.
+There is no mandatory coverage percentage or metric-exception process. Report
+only actual measurements. Test changed behavior, significant boundaries/failures
+and the requested scenario with independent expectations; choose methods for
+their concrete risks. Unchanged coverage debt does not block a task. Preserve
+separately agreed acceptance checks. For upstream updates, run existing regression
+tests without requiring migration of unchanged custom modules.
+
+Request intermediate test review only for complex scenarios, disputed expectations
+or substantial test changes, using the review skill's configured role. Within
+TDD, complete that conditional review before implementation. The final primary
+reviewer always reviews test meaning, deletions, expectations and discovery.
 
 Run the existing checks declared by `.githooks/pre-push` once, plus any
 additional affected checks in `docs/engineering/verification.md` that
