@@ -221,7 +221,9 @@ current windows consistently. Terra low repeated a previous translation once;
 Terra medium translated the accumulated history once. Full originals, outputs,
 per-request usage, latency and costs are retained privately under logical
 artifact ID `grisaia-opening-benchmark-v1`. Its stable locator is
-`F:\LunaTranslator-Grisaia\artifact-locator.json`; the corpus is not in Git.
+`<archive-home>/artifact-locator.json`; the corpus is not in Git. Here
+`<archive-home>` is the workspace's `.local/legacy-grisaia`, described in
+[Archived legacy installation](integrations.md#archived-legacy-installation).
 
 ## Verification and remaining acceptance
 
@@ -317,7 +319,7 @@ the two diagnostic windows were verified against the exact loaded patched
 event rows retained their exact stored values, and the journal
 reached 128 completed captures in run 2. This checkpoint is
 `grisaia-dynamic-scene-roles-v1`; its machine-local locator is
-`F:\LunaTranslator-Grisaia\checkpoints\scene-role-v1\locator.json`.
+`<archive-home>/checkpoints/scene-role-v1/locator.json`.
 
 For this recovery change only, the owner approved an exception to the 100%
 measured coverage target. It covers `GrisaiaModelRoles.h`,
@@ -401,7 +403,7 @@ notes and event rows were preserved. After the owner's manual retry approval,
 installed Luna completed the pending queue through event 1102, reaching 1100
 completed translations. Original captures and all pre-failure history remained
 unchanged. The retained diagnostic artifact is `grisaia-context-diagnostic-v1`,
-located by `<private-home>/checkpoints/context-diagnostic/locator.json`; its state
+located by `<archive-home>/checkpoints/context-diagnostic/locator.json`; its state
 is consumed and its API candidate remains available privately.
 
 There is no word-count target or fixed context size. The former 1200-word cap
@@ -512,6 +514,6 @@ completeness of every model-generated note. Very large future full rebuilds can
 still exceed the input limit; retry alone cannot resolve an oversized request.
 
 The verified pre-rebuild backup is logical artifact `grisaia-context-v2-rebuild-v1`;
-its machine-local locator is `<private-home>/checkpoints/context-v2/locator.json`.
+its machine-local locator is `<archive-home>/checkpoints/context-v2/locator.json`.
 The locator records the backup digest, original event digest, deployed core
 digests and completed rebuild state. Private journal payloads stay outside Git.

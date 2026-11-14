@@ -109,8 +109,29 @@ packaged translations remain authoritative after source updates.
 Migration uses SQLite backup, including committed WAL contents, and verifies all
 tables, rows and schema. It keeps the established game UID and original source
 installation. Existing destination state causes refusal rather than merging or
-overwriting histories. Historical benchmark/checkpoint artifacts stay at their
-existing private locations; migration does not sweep or delete the legacy home.
+overwriting histories. The initial migration does not sweep or delete the legacy
+home; historical artifacts require the separate archival transfer below.
+
+## Archived legacy installation
+
+The remaining legacy files are preserved under `.local/legacy-grisaia`, including
+benchmark evidence, historical checkpoints, the former journal and patch rollback
+materials. This archive is private persistent data, excluded from Git. Its
+`relocation-locator.json` identifies the relocated metadata and records historical
+validation gaps; `relocation-original-inventory.json` records the exact original
+file hashes. Original metadata is retained under `relocation-originals`.
+
+Relocated locators use the archive paths. Parent hashes are refreshed only when
+the original reference matched; pre-existing stale hashes and missing evidence
+remain explicitly recorded. They are not made valid merely by moving them.
+Historical compiler caches and logs remain evidence rather than current build
+inputs. Current builds use `build` and the workspace's own dependency template.
+
+The archive's Start, Status, Retry and New Run wrappers use the current workspace.
+Its `Rollback Patches.cmd` uses the retained patch manifest; running it is a
+separate explicit action that changes the installed game. The Windows Start menu
+shortcut named LunaTranslator launches the workspace with its prepared runtime.
+Preserve the archive together with the rest of `.local` when replacing a checkout.
 
 ## Verification
 
