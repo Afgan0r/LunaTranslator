@@ -114,21 +114,31 @@ home; historical artifacts require the separate archival transfer below.
 
 ## Archived legacy installation
 
-The remaining legacy files are preserved under `.local/legacy-grisaia`, including
-benchmark evidence, historical checkpoints, the former journal and patch rollback
-materials. This archive is private persistent data, excluded from Git. Its
-`relocation-locator.json` identifies the relocated metadata and records historical
-validation gaps; `relocation-original-inventory.json` records the exact original
-file hashes. Original metadata is retained under `relocation-originals`.
+Selected legacy evidence is retained under `.local/legacy-grisaia`: benchmark
+comparisons, historical checkpoints, the former journal, diagnostic logs and
+patch rollback metadata. `diagnostics` holds logs and unique historical source
+extracted from the discarded build/runtime directories. The owner approved
+removing the copied application, old build outputs, dependency caches, installer
+archives and duplicate installed patch assets. They are not runtime dependencies.
+
+This private archive is excluded from Git. `retention-locator.json` records the
+current retained file hashes, extracted diagnostics and approved removals.
+`relocation-locator.json` records the preceding move and inherited validation
+gaps. `relocation-original-inventory.json` is a historical inventory of the full
+copy before pruning, not a claim that every listed file is still retained.
+Original metadata is kept under `relocation-originals`; `retention-originals`
+preserves the metadata immediately before the approved cleanup.
 
 Relocated locators use the archive paths. Parent hashes are refreshed only when
 the original reference matched; pre-existing stale hashes and missing evidence
 remain explicitly recorded. They are not made valid merely by moving them.
-Historical compiler caches and logs remain evidence rather than current build
+References to discarded binaries and directories are explicitly marked removed.
+Retained logs and manifests are historical evidence rather than current build
 inputs. Current builds use `build` and the workspace's own dependency template.
 
 The archive's Start, Status, Retry and New Run wrappers use the current workspace.
-Its `Rollback Patches.cmd` uses the retained patch manifest; running it is a
+Its `Rollback Patches.cmd` uses the retained patch manifest and installed game;
+it does not need the deleted duplicate patch source assets. Running it is a
 separate explicit action that changes the installed game. The Windows Start menu
 shortcut named LunaTranslator launches the workspace with its prepared runtime.
 Preserve the archive together with the rest of `.local` when replacing a checkout.
