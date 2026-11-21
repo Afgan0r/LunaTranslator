@@ -130,6 +130,29 @@ class CurrentWindowTests(unittest.TestCase):
         self.assertEqual(terms, [])
         self.assertEqual(len(self.requests), 1)
 
+    def test_sends_ultrafast_when_selected_in_the_current_window_profile(self) -> None:
+        self.settings["service_tier"] = "ultrafast"
+        original = "A short dialogue window."
+        self.session.capture(original, "one")
+
+        self.assertEqual(self.session.translate_current(original, []), self.reply["translation"])
+        self.assertEqual(len(self.requests), 1)
+        request = self.requests[0]
+        self.assertEqual(request["model"], "gpt-6.2-sol")
+        self.assertEqual(request["reasoning"], {"effort": "medium"})
+        self.assertEqual(request["service_tier"], "ultrafast")
+
+    def test_invalid_service_tier_stops_before_any_request(self) -> None:
+        from integrations.engine import TranslationError
+
+        self.settings["service_tier"] = "ultra-fast"
+        original = "A short dialogue window."
+        self.session.capture(original, "one")
+
+        with self.assertRaisesRegex(TranslationError, "service_tier"):
+            self.session.translate_current(original, [])
+        self.assertEqual(self.visited, [])
+
     def test_complete_native_window_restores_manual_translation_after_a_fault(self) -> None:
         from integrations.engine import TranslationError
 

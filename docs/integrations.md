@@ -83,7 +83,8 @@ Set `translation_mode` to `current_window` under a Grisaia profile's
 button or shortcut for each window you want translated. Capture updates the
 current window immediately. Each request sends that window and matching pairs
 from the editable per-game **Proper Noun Translation** dictionary through the
-guarded Responses transport using GPT-6.2 Sol, medium reasoning and Fast.
+guarded Responses transport using GPT-6.2 Sol with medium reasoning. The
+`service_tier` setting defaults to `fast` and also accepts `ultrafast`.
 
 The game dictionary gains source-grounded suggestions from each successful
 request. Existing entries, including manual edits, take priority. The first

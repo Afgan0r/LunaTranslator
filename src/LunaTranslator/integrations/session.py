@@ -119,6 +119,9 @@ class Session:
             reason = self.not_ready(settings)
             if reason:
                 raise TranslationError("capture_unavailable", reason)
+            service_tier = settings.get("service_tier", "fast")
+            if service_tier not in ("fast", "ultrafast"):
+                raise TranslationError("configuration", "Set service_tier to fast or ultrafast.")
             config = ClientConfig.from_mapping(
                 {**settings, "model": "gpt-6.2-sol", "reasoning_effort": "medium"}
             )
@@ -138,7 +141,7 @@ class Session:
                 messages,
                 "luna-current-window",
                 response_format=GLOSSARY_FORMAT,
-                service_tier="fast",
+                service_tier=service_tier,
             )
             try:
                 translation, suggestions = parse_glossary_response(result.text, window[1])
