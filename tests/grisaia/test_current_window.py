@@ -7,7 +7,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
-from contextlib import closing
+from contextlib import closing, suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -30,7 +30,7 @@ class CurrentWindowTests(unittest.TestCase):
         key_file.write_text("synthetic-api-key", encoding="utf-8")
         self.archive = home / "journal.sqlite3"
         self.archive.write_bytes(b"preexisting private journal marker")
-        settings = {
+        self.settings: JsonObject = {
             "key_file": str(key_file),
             "expected_country": "PL",
             "proxy": {"host": "synthetic-proxy", "port": 8080},
@@ -44,7 +44,7 @@ class CurrentWindowTests(unittest.TestCase):
         }
         self.session = Session(
             home,
-            lambda: settings,
+            lambda: self.settings,
             lambda _: None,
             self.originals.append,
             lambda _: None,
@@ -129,6 +129,85 @@ class CurrentWindowTests(unittest.TestCase):
             self.session.translate_current(original, terms)
         self.assertEqual(terms, [])
         self.assertEqual(len(self.requests), 1)
+
+    def test_complete_native_window_restores_manual_translation_after_a_fault(self) -> None:
+        from integrations.engine import TranslationError
+
+        from extensions.grisaia.adapter import Adapter
+
+        home = self.archive.parent
+        game = str(home / "Grisaia.exe")
+        hook = "synthetic-full-window-hook"
+        self.settings.update(
+            game_exe=game,
+            hook_code=hook,
+            hook_validated=True,
+            capture_protocol="grisaia-windows-v1",
+        )
+        notices: list[str] = []
+
+        class Thread:
+            def __init__(self) -> None:
+                self.processId = 1
+                self.ctx = 0
+                self.ctx2 = 0
+
+        def make_adapter() -> Adapter:
+            adapter = Adapter(
+                home,
+                lambda: self.settings,
+                notices.append,
+                self.originals.append,
+                lambda _: None,
+                current_window=True,
+            )
+            adapter.configure_capture(lambda _: game, lambda: None)
+            self.addCleanup(adapter.stop_lossless)
+            return adapter
+
+        def send(adapter: Adapter, packet: JsonObject) -> None:
+            self.assertTrue(
+                adapter.capture_hook_event(
+                    "game", hook, "GrisaiaWindows", Thread(), json.dumps(packet)
+                )
+            )
+
+        adapter = make_adapter()
+        previous = {
+            "schema": 1,
+            "kind": "window",
+            "session": "1:test",
+            "serial": 1,
+            "text": "Prior window.",
+            "speaker": "",
+        }
+        send(adapter, previous)
+        send(adapter, {"schema": 1, "kind": "error", "code": "capture_unavailable"})
+        with suppress(TranslationError):
+            adapter.translate_current("Prior window.", [])
+        self.assertEqual(self.visited, [])
+
+        send(adapter, previous)
+        self.assertEqual(adapter.translate_current("Prior window.", []), self.reply["translation"])
+        self.assertIn("complete dialogue window", notices[-1])
+        self.assertEqual(self.originals, ["Prior window.", "Prior window."])
+        self.assertEqual(len(self.requests), 1)
+
+        fault_path = home / "capture-fault.jsonl"
+        retained = fault_path.read_bytes()
+        self.assertIn(b"capture_unavailable", retained)
+        adapter.stop_lossless()
+        reopened = make_adapter()
+        send(reopened, {**previous, "serial": 2, "text": "Loaded save window."})
+        self.assertEqual(
+            reopened.translate_current("Loaded save window.", []), self.reply["translation"]
+        )
+        self.assertEqual(
+            [request["input"][-1]["content"] for request in self.requests],
+            ["Prior window.", "Loaded save window."],
+        )
+        self.assertEqual(fault_path.read_bytes(), retained)
+        self.assertEqual(self.archive.read_bytes(), b"preexisting private journal marker")
 
     def test_imports_only_consistent_repeated_speaker_names_from_history(self) -> None:
         from integrations.glossary import add_glossary_entries

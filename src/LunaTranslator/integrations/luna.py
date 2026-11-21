@@ -201,6 +201,7 @@ class TS(basetrans):
         return False
 
     def _current_original(self, original: str) -> None:
+        self._last_notice = None
         source = self._source()
         if source is not None:
             source.runonce_line = original

@@ -83,6 +83,7 @@ class Session:
                 if self._window is not None and self._window[0] == occurrence:
                     return self._window[1] == original
                 self._window = occurrence, original
+                self._last_notice = None
                 self._original_callback(original)
                 return True
             entry_id = journal.capture(original, window_id=occurrence, deduplicate_all=True)
@@ -94,6 +95,10 @@ class Session:
             self._original_callback(original)
             self._wake.set()
             return True
+
+    def discard_current_window(self) -> None:
+        with self._capture_lock:
+            self._window = None
 
     def translate_current(self, original: str, entries: list[dict[str, object]]) -> str:
         from .glossary import (
