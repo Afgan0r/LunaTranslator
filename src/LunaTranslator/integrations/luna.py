@@ -2,57 +2,135 @@
 
 import importlib.util
 import os
+import sqlite3
 import threading
+import uuid
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any, Protocol, cast
 
 import gobject
 from myutils.config import uid2gamepath
 from translator.basetranslator import basetrans
 
 from .configuration import Workspace
+from .glossary import add_glossary_entries
+from .glossary_history import journal_speaker_terms
+from .transport import JsonObject
 
 
-def adapter_path():
+class TextSource(Protocol):
+    gameuid: str | None
+    runonce_line: str
+
+
+class OverlaySignal(Protocol):
+    def emit(self, *args: object) -> None: ...
+
+
+class Overlay(Protocol):
+    displayraw1: OverlaySignal
+    displayres: OverlaySignal
+
+
+class LunaRuntime(Protocol):
+    currenttext: str
+    currenttext_raw: str
+    currenttranslate: str
+    currenttranslate_1: str
+    currentsignature: uuid.UUID
+    translation_ui: Overlay
+
+    def displayinfomessage(self, text: str, infotype: str) -> None: ...
+
+
+def luna_base() -> LunaRuntime:
+    return cast(LunaRuntime, gobject.base)
+
+
+class ProfileSettings(Protocol):
+    def profile_for_game(self, uid: str, gamepath: str | None) -> JsonObject | None: ...
+    def profile_home(self, uid: str) -> Path: ...
+    def settings_for(self, uid: str) -> JsonObject: ...
+
+
+class GameSession(Protocol):
+    current_window: bool
+
+    def configure_capture(
+        self, gamepath: Callable[[str], str | None], source: Callable[[], TextSource | None]
+    ) -> None: ...
+    def capture_hook_event(
+        self, gameuid: str, hookcode: str, hookname: str, tp: object, text: str
+    ) -> bool: ...
+    def translate_current(self, original: str, entries: list[dict[str, object]]) -> str: ...
+    def start(self) -> None: ...
+    def stop_lossless(self) -> None: ...
+
+
+class AdapterFactory(Protocol):
+    def __call__(
+        self,
+        home: Path,
+        settings: Callable[[], Mapping[str, Any]],
+        notice: Callable[[str], None],
+        original: Callable[[str], None],
+        publish: Callable[[JsonObject], None],
+        *,
+        active: Callable[[], bool],
+        current_window: bool = False,
+    ) -> GameSession: ...
+
+
+def adapter_path() -> Path:
     root = Path(__file__).resolve().parents[2]
     if root.name == "src" and (root.parent / "extensions/grisaia/adapter.py").is_file():
         root = root.parent
     return root / "extensions/grisaia/adapter.py"
 
 
-def load_adapter():
+def load_adapter() -> AdapterFactory:
     spec = importlib.util.spec_from_file_location("luna_profile_grisaia", adapter_path())
+    if spec is None or spec.loader is None:
+        raise ImportError("Could not load the Grisaia adapter.")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.Adapter
+    return cast(AdapterFactory, module.Adapter)
 
 
 class TS(basetrans):
-    def init(self):
+    def init(self) -> None:
         if getattr(self, "_profile_initialized", False):
             return
-        self.workspace = Workspace(os.environ.get("LUNA_WORKSPACE_HOME", ""))
+        self.workspace = cast(ProfileSettings, Workspace(os.environ.get("LUNA_WORKSPACE_HOME", "")))
         self._switch_lock = threading.RLock()
-        self._session = None
-        self._uid = None
+        self._session: GameSession | None = None
+        self._uid: str | None = None
         self._refused = False
         self._stopped = False
-        self._last_notice = None
+        self._last_notice: str | None = None
         self._profile_initialized = True
         self.active_game_changed()
 
     @staticmethod
-    def _source():
-        return getattr(gobject.base, "textsource", None)
+    def _source() -> TextSource | None:
+        return cast(TextSource | None, getattr(gobject.base, "textsource", None))
 
-    def _active_uid(self):
-        return getattr(self._source(), "gameuid", None)
+    def _active_uid(self) -> str | None:
+        source = self._source()
+        return source.gameuid if source is not None else None
 
-    def _notice(self, text):
+    @property
+    def current_window(self) -> bool:
+        session = self._session
+        return session is not None and session.current_window
+
+    def _notice(self, text: str) -> None:
         if self._last_notice != text:
-            gobject.base.displayinfomessage(text, "<msg_error_Translator>")
+            luna_base().displayinfomessage(text, "<msg_error_Translator>")
             self._last_notice = text
 
-    def active_game_changed(self):
+    def active_game_changed(self) -> None:
         if self._stopped:
             return
         uid = self._active_uid()
@@ -68,26 +146,38 @@ class TS(basetrans):
             if not uid:
                 return
             try:
-                profile = self.workspace.profile_for_game(uid, uid2gamepath[uid])
+
+                def gamepath(key: str) -> str | None:
+                    return cast(str | None, uid2gamepath[key])
+
+                profile = self.workspace.profile_for_game(uid, gamepath(uid))
                 if profile is None:
                     return
                 if profile["adapter"] != "grisaia":
                     raise ValueError("Unsupported adapter")
+                current_window = profile["settings"].get("translation_mode") == "current_window"
                 adapter = load_adapter()
                 session = adapter(
-                    self.workspace.profile_home(uid), lambda: self.workspace.settings_for(uid),
-                    self._notice, self._original, self._publish,
-                    active=lambda: (not self._stopped and self._session is session
-                                    and self._active_uid() == uid),
+                    self.workspace.profile_home(uid),
+                    lambda: self.workspace.settings_for(uid),
+                    self._notice,
+                    self._current_original if current_window else self._original,
+                    self._publish,
+                    active=lambda: (
+                        not self._stopped and self._session is session and self._active_uid() == uid
+                    ),
+                    current_window=current_window,
                 )
-                session.configure_capture(lambda key: uid2gamepath[key], self._source)
+                session.configure_capture(gamepath, self._source)
                 self._session = session
                 session.start()
             except Exception:
                 self._refused = True
-                self._notice("Integration: game profile unavailable. Stop advancing; custom capture is blocked.")
+                self._notice(
+                    "Integration: game profile unavailable. Stop advancing; custom capture is blocked."
+                )
 
-    def suspend_game(self):
+    def suspend_game(self) -> None:
         # Finish publication already inside its guard before the host changes UID.
         with self._switch_lock:
             previous = self._session
@@ -96,7 +186,9 @@ class TS(basetrans):
             if previous is not None:
                 previous.stop_lossless()
 
-    def capture_hook_event(self, gameuid, *args):
+    def capture_hook_event(
+        self, gameuid: str, hookcode: str, hookname: str, tp: object, text: str
+    ) -> bool:
         self.active_game_changed()
         if gameuid != self._active_uid():
             return bool(self._session or self._refused)
@@ -104,40 +196,83 @@ class TS(basetrans):
             return True
         session = self._session
         if session:
-            session.capture_hook_event(gameuid, *args)
+            session.capture_hook_event(gameuid, hookcode, hookname, tp, text)
             return True
         return False
 
+    def _current_original(self, original: str) -> None:
+        source = self._source()
+        if source is not None:
+            source.runonce_line = original
+        luna_base().currentsignature = uuid.uuid4()
+        self._original(original)
+
     @staticmethod
-    def _original(original):
-        base = gobject.base
+    def _original(original: str) -> None:
+        base = luna_base()
         base.currenttext = original
         base.currenttext_raw = original
         base.currenttranslate = ""
         base.currenttranslate_1 = ""
         base.translation_ui.displayraw1.emit(original, True, True)
 
-    def _publish(self, entry):
+    def _publish(self, entry: JsonObject) -> None:
         from gui.rendertext.texttype import TranslateColor
 
-        base = gobject.base
+        base = luna_base()
         self._original(entry["original"])
         base.currenttranslate = entry["translation"]
         base.currenttranslate_1 = entry["translation"]
         base.translation_ui.displayres.emit(
-            dict(name="Grisaia · OpenAI", color=TranslateColor("selfbuild"),
-                 res=entry["translation"], iter_context=(0, "selfbuild"),
-                 klass="selfbuild", is_auto_run=True)
+            dict(
+                name="Grisaia · OpenAI",
+                color=TranslateColor("selfbuild"),
+                res=entry["translation"],
+                iter_context=(0, "selfbuild"),
+                klass="selfbuild",
+                is_auto_run=True,
+            )
         )
         self._last_notice = None
 
-    def translate(self, content):
+    def translate_current(self, content: object) -> str:
         self.active_game_changed()
-        if self._session or self._refused:
-            raise RuntimeError("Select the configured full-window hook; use the Retry control for recovery.")
+        session = self._session
+        uid = self._uid
+        if session is not None and session.current_window and uid is not None:
+            original = getattr(content, "rawtext", content)
+            if not isinstance(original, str):
+                return ""
+            from myutils import config as luna_config
+
+            games = cast(dict[str, JsonObject], vars(luna_config)["savehook_new_data"])
+            game = games[uid]
+            raw_entries = game.setdefault("noundictconfig_ex", [])
+            if not isinstance(raw_entries, list):
+                raise RuntimeError("Invalid game glossary.")
+            entries = cast(list[dict[str, object]], raw_entries)
+            if not game.get("current_window_glossary_seeded"):
+                try:
+                    for pair in journal_speaker_terms(
+                        self.workspace.profile_home(uid) / "journal.sqlite3"
+                    ):
+                        add_glossary_entries(entries, [pair])
+                except (OSError, sqlite3.Error):
+                    self._notice("Integration: Earlier speaker forms could not be imported.")
+                else:
+                    game["current_window_glossary_seeded"] = True
+            return session.translate_current(original, entries)
         return ""
 
-    def stop_lossless(self):
+    def translate(self, content: object):
+        self.active_game_changed()
+        if self._session is not None or self._refused:
+            raise RuntimeError(
+                "Select the configured full-window hook; use the Retry control for recovery."
+            )
+        return ""
+
+    def stop_lossless(self) -> None:
         self._stopped = True
         if self._session is not None:
             self._session.stop_lossless()

@@ -76,6 +76,22 @@ Status contains queue metadata, not dialogue or credentials. Retry remains an
 explicit operation. Use New Run for an older save or a new playthrough; it
 preserves previous history. No new management screens are added to Luna.
 
+## Translate the current window
+
+Set `translation_mode` to `current_window` under a Grisaia profile's
+`settings` to select its on-demand mode. Use Luna's **Manual execution**
+button or shortcut for each window you want translated. Capture updates the
+current window immediately. Each request sends that window and matching pairs
+from the editable per-game **Proper Noun Translation** dictionary through the
+guarded Responses transport using GPT-6.2 Sol, medium reasoning and Fast.
+
+The game dictionary gains source-grounded suggestions from each successful
+request. Existing entries, including manual edits, take priority. The first
+translation also imports consistent, repeated speaker spellings from the old
+journal. It reads the journal locally and preserves the old runs. Use Luna's
+normal shortcut again if a request fails. Loading an older save needs the same
+shortcut and no separate run marker in this mode.
+
 ## Prepare, build and launch
 
 The first assembly needs an existing compatible portable runtime as its

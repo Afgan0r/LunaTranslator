@@ -5,6 +5,14 @@ import os
 
 
 class TS(basetrans):
+    @property
+    def onlymanual(self):
+        return getattr(self.internal, "current_window", False) or super().onlymanual
+
+    @property
+    def using_gpt_dict(self):
+        return getattr(self.internal, "current_window", False) or super().using_gpt_dict
+
     def suspend_game(self):
         suspend = getattr(self.internal, "suspend_game", None)
         if suspend:
@@ -55,4 +63,6 @@ class TS(basetrans):
         self.mayreinit()
         if not self.internal:
             return ""
+        if getattr(self.internal, "current_window", False):
+            return self.internal.translate_current(content)
         return self.internal.translate(content)
