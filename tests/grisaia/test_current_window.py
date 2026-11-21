@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src/LunaTranslator"))
 
 
+class SyntheticThread:
+    def __init__(self) -> None:
+        self.processId = 1
+        self.ctx = 0
+        self.ctx2 = 0
+
+
 class CurrentWindowTests(unittest.TestCase):
     def setUp(self) -> None:
         from integrations.session import Session
@@ -169,12 +176,6 @@ class CurrentWindowTests(unittest.TestCase):
         )
         notices: list[str] = []
 
-        class Thread:
-            def __init__(self) -> None:
-                self.processId = 1
-                self.ctx = 0
-                self.ctx2 = 0
-
         def make_adapter() -> Adapter:
             adapter = Adapter(
                 home,
@@ -191,7 +192,7 @@ class CurrentWindowTests(unittest.TestCase):
         def send(adapter: Adapter, packet: JsonObject) -> None:
             self.assertTrue(
                 adapter.capture_hook_event(
-                    "game", hook, "GrisaiaWindows", Thread(), json.dumps(packet)
+                    "game", hook, "GrisaiaWindows", SyntheticThread(), json.dumps(packet)
                 )
             )
 
@@ -230,6 +231,43 @@ class CurrentWindowTests(unittest.TestCase):
             ["Prior window.", "Loaded save window."],
         )
         self.assertEqual(fault_path.read_bytes(), retained)
+        self.assertEqual(self.archive.read_bytes(), b"preexisting private journal marker")
+
+    def test_stock_profile_translates_only_the_selected_luna_text(self) -> None:
+        from extensions.grisaia.adapter import Adapter
+
+        home = self.archive.parent
+        game = str(home / "Grisaia.exe")
+        self.settings.update(game_exe=game, hook_code="synthetic", capture_protocol="luna-stock")
+        adapter = Adapter(
+            home,
+            lambda: self.settings,
+            lambda _: None,
+            self.originals.append,
+            lambda _: None,
+            current_window=True,
+        )
+        adapter.configure_capture(lambda _: game, lambda: None)
+        self.addCleanup(adapter.stop_lossless)
+        original = "The Silver-Ward holds a Soul Shard."
+        self.assertFalse(
+            adapter.capture_hook_event("game", "stock", "CatSystem2", SyntheticThread(), original)
+        )
+        self.assertTrue(
+            adapter.capture_hook_event(
+                "game", "native", "GrisaiaWindows", SyntheticThread(), "fault"
+            )
+        )
+        self.assertEqual(self.originals, [])
+
+        self.assertTrue(adapter.capture_selected_hook_text("native packet", ("GrisaiaWindows",)))
+        self.assertEqual(adapter.translate_current("native packet", []), "")
+        self.assertTrue(adapter.capture_selected_hook_text(original, ("CatSystem2",)))
+        self.assertEqual(self.originals, ["", original])
+        self.assertEqual(self.visited, [])
+        self.assertEqual(adapter.translate_current(original, []), self.reply["translation"])
+        self.assertEqual([r["input"][-1]["content"] for r in self.requests], [original])
+        self.assertFalse((home / "capture-fault.jsonl").exists())
         self.assertEqual(self.archive.read_bytes(), b"preexisting private journal marker")
 
     def test_imports_only_consistent_repeated_speaker_names_from_history(self) -> None:

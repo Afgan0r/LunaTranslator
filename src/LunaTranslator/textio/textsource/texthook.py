@@ -790,7 +790,7 @@ class texthook(basetext):
         except:
             pass
         _collector = globalconfig["multihookmergeby"].join([_[1] for _ in keyandtexts])
-        self.dispatchtext(_collector)
+        self.dispatchtext(_collector, tuple(key[1] for key, _ in keyandtexts))
 
     def dispatchtext_multiline_delayed(self, key, text):
         with self.multiselectedcollectorlock:
@@ -804,7 +804,7 @@ class texthook(basetext):
         handled = capture(self.gameuid, hc, key[1], tp, output) if capture else False
         if not handled and key in self.selectedhook:
             if len(self.selectedhook) == 1:
-                self.dispatchtext(output)
+                self.dispatchtext(output, (key[1],))
             else:
                 self.dispatchtext_multiline_delayed(key, output)
         gobject.base.hookselectdialog.update_item_new_line.emit(key, output)
@@ -824,10 +824,15 @@ class texthook(basetext):
             xx.append(self.serialkey(key))
         return xx
 
-    def dispatchtext(self, text):
-        self.runonce_line = text
+    def dispatchtext(self, text, hook_names=()):
         if len(text) > globalconfig.get("maxOutputSize", 10000):
+            self.runonce_line = text
             return
+        translator = gobject.base.translators.get("selfbuild")
+        capture = getattr(translator, "capture_selected_hook_text", None)
+        if capture and capture(self.gameuid, text, hook_names):
+            return
+        self.runonce_line = text
         return super().dispatchtext(text, isFromHook=True)
 
     def gettextonce(self):

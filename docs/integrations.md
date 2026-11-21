@@ -86,6 +86,10 @@ from the editable per-game **Proper Noun Translation** dictionary through the
 guarded Responses transport using GPT-6.2 Sol with medium reasoning. The
 `service_tier` setting defaults to `fast` and also accepts `ultrafast`.
 
+Set `capture_protocol` to `luna-stock` to use the stock text hook in this mode.
+In Luna's **Select text** window, select the `CatSystem2` stream that shows the
+dialogue body. A new game process may require choosing the stream again.
+
 The game dictionary gains source-grounded suggestions from each successful
 request. Existing entries, including manual edits, take priority. The first
 translation also imports consistent, repeated speaker spellings from the old

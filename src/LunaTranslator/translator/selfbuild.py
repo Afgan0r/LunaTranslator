@@ -34,6 +34,10 @@ class TS(basetrans):
         capture = getattr(self.internal, "capture_hook_event", None)
         return bool(capture(*args)) if capture else False
 
+    def capture_selected_hook_text(self, gameuid, text, hook_names):
+        capture = getattr(self.internal, "capture_selected_hook_text", None)
+        return bool(capture(gameuid, text, hook_names)) if capture else False
+
     def mayreinit(self):
         if os.environ.get("LUNA_WORKSPACE_HOME"):
             from integrations import luna as module

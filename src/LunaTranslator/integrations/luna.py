@@ -56,6 +56,7 @@ class ProfileSettings(Protocol):
 
 class GameSession(Protocol):
     current_window: bool
+    stock_capture: bool
 
     def configure_capture(
         self, gamepath: Callable[[str], str | None], source: Callable[[], TextSource | None]
@@ -63,6 +64,7 @@ class GameSession(Protocol):
     def capture_hook_event(
         self, gameuid: str, hookcode: str, hookname: str, tp: object, text: str
     ) -> bool: ...
+    def capture_selected_hook_text(self, text: str, hook_names: tuple[str, ...]) -> bool: ...
     def translate_current(self, original: str, entries: list[dict[str, object]]) -> str: ...
     def start(self) -> None: ...
     def stop_lossless(self) -> None: ...
@@ -196,9 +198,19 @@ class TS(basetrans):
             return True
         session = self._session
         if session:
-            session.capture_hook_event(gameuid, hookcode, hookname, tp, text)
-            return True
+            handled = session.capture_hook_event(gameuid, hookcode, hookname, tp, text)
+            return handled or not session.stock_capture
         return False
+
+    def capture_selected_hook_text(
+        self, gameuid: str, text: str, hook_names: tuple[str, ...]
+    ) -> bool:
+        session = self._session
+        return bool(
+            session is not None
+            and gameuid == self._active_uid() == self._uid
+            and session.capture_selected_hook_text(text, hook_names)
+        )
 
     def _current_original(self, original: str) -> None:
         self._last_notice = None

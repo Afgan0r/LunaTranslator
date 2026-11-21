@@ -41,11 +41,16 @@ class Adapter(Session):
         self._instance = uuid.uuid4().hex
         self._sequence = 0
         self._probe_requests: set[tuple[int, str]] = set()
+        self.stock_capture = (
+            self.current_window and self._settings().get("capture_protocol") == "luna-stock"
+        )
         self._capture_fault = (
             not self.current_window and (self.home / "capture-fault.jsonl").exists()
         )
 
     def not_ready(self, settings: Mapping[str, object]) -> str | None:
+        if self.stock_capture:
+            return None
         if self._capture_fault:
             return QUEUE_PAUSED
         if (
@@ -144,6 +149,8 @@ class Adapter(Session):
     def capture_hook_event(
         self, gameuid: str, hookcode: str, hookname: str, tp: HookThread, text: str
     ) -> bool:
+        if self.stock_capture:
+            return hookname != "CatSystem2"
         settings = self._capture_route()
         if settings is None:
             return False
@@ -204,4 +211,18 @@ class Adapter(Session):
         with self._capture_lock:
             if not self.capture(original, occurrence):
                 self._retain_capture_fault(text, "window_identity_collision")
+        return True
+
+    def capture_selected_hook_text(self, text: str, hook_names: tuple[str, ...]) -> bool:
+        if not self.stock_capture:
+            return False
+        with self._capture_lock:
+            # Selecting a row can replay its history without an output callback.
+            if text.strip() and hook_names and all(name == "CatSystem2" for name in hook_names):
+                self._sequence += 1
+                self.capture(text, str(self._sequence))
+            else:
+                self.discard_current_window()
+                if self._can_start():
+                    self._original_callback("")
         return True

@@ -986,7 +986,10 @@ if ( a9 )
 bool CatSystem::attach_function()
 {
   if (grisaia::attach())
+  {
+    InsertCatSystemHook();
     return true;
+  }
   bool utf8 = false;
   auto b1 = InsertCatSystemHook();
   if (!b1)
