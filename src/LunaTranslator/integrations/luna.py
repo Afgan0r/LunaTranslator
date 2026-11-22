@@ -218,16 +218,16 @@ class TS(basetrans):
         if source is not None:
             source.runonce_line = original
         luna_base().currentsignature = uuid.uuid4()
-        self._original(original)
+        self._original(original, update_translation=False)
 
     @staticmethod
-    def _original(original: str) -> None:
+    def _original(original: str, *, update_translation: bool = True) -> None:
         base = luna_base()
         base.currenttext = original
         base.currenttext_raw = original
         base.currenttranslate = ""
         base.currenttranslate_1 = ""
-        base.translation_ui.displayraw1.emit(original, True, True)
+        base.translation_ui.displayraw1.emit(original, update_translation, True)
 
     def _publish(self, entry: JsonObject) -> None:
         from gui.rendertext.texttype import TranslateColor
