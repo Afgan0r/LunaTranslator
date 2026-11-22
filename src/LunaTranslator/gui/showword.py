@@ -2513,9 +2513,7 @@ class searchwordW(closeashidewindow):
         self.searchlayout.addWidget(self.searchtext)
         searchbutton = getIconButton(
             icon="fa.search",
-            callback=lambda: self.search(
-                self.searchtext.text(), sentence=self.maybeusecachesentence()
-            ),
+            callback=self._submit_lookup,
             tips="查词",
         )
         searchbutton.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -2673,9 +2671,30 @@ class searchwordW(closeashidewindow):
         else:
             self.ankiwindow.hide()
 
+    @staticmethod
+    def _open_cambridge_lookup(word: str) -> bool:
+        word = word.strip()
+        if not word or not globalconfig.get("open_cambridge_on_lookup", False):
+            return False
+        url = "https://dictionary.cambridge.org/search/direct/?datasetsearch=english&q="
+        result = windows.ShellExecute(
+            None, "open", url + quote(word, safe=""), None, None, windows.SW_SHOWNORMAL
+        )
+        if result > 32:
+            return True
+        print("Cambridge Dictionary browser launch failed (error {}).".format(result))
+        return False
+
+    def _submit_lookup(self):
+        word = self.searchtext.text()
+        if not self._open_cambridge_lookup(word):
+            self.search(word, sentence=self.maybeusecachesentence())
+
     def _click_word_search_function(
         self, word: str, sentence=None, append=False, readydata=None, checklangs=False
     ):
+        if self._open_cambridge_lookup(word):
+            return
         self.showNormal()
         if self.__state != 2:
             return

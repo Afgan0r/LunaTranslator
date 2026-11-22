@@ -722,6 +722,10 @@ def setTabcishu_l(self):
                     "辞书显示顺序",
                     D_getIconButton(functools.partial(vistranslate_rank, self)),
                 ],
+                [
+                    "查词时打开剑桥词典",
+                    D_getsimpleswitch(globalconfig, "open_cambridge_on_lookup"),
+                ],
             ],
             canhover=False,
         ),

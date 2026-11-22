@@ -1294,6 +1294,7 @@
             "name": "自定义"
         }
     },
+    "open_cambridge_on_lookup": false,
     "useopenlinklink1": [
         "https://www.google.com/search?q={word}",
         "https://jpdb.io/search?q={word}",
